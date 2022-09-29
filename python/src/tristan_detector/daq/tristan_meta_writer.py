@@ -14,7 +14,7 @@ import struct
 from odin_data.meta_writer.meta_writer import MetaWriter, MESSAGE_TYPE_ID, FRAME, require_open_hdf5_file
 from odin_data.meta_writer.hdf5dataset import Int32HDF5Dataset
 from odin_data.util import construct_version_dict
-import _version as versioneer
+# from . import _version as versioneer
 
 # Dataset names
 DATASET_TIME_SLICE = "ts_qty_module"

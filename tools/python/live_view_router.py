@@ -20,7 +20,7 @@ publisher = context.socket(zmq.PUB)
 publisher.bind("tcp://*:9999")
 
 # Get updates, expect random Ctrl-C death
-print "Collecting updates from ViewFinder server..."
+print("Collecting updates from ViewFinder server...")
 while True:
     #plt.cla()
     start = datetime.now()

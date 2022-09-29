@@ -1,14 +1,14 @@
 """
 Created on 19 September 2017
-
+This opens a direct channel to the detector and sends it a few commands and logs the responses.
 @author: Alan Greer
 """
-from __future__ import print_function
+
 
 import logging
 import argparse
-from latrd_channel import LATRDChannel
-from latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
+from .latrd_channel import LATRDChannel
+from .latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
 
 
 def options():

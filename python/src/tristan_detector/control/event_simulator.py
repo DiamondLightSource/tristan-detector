@@ -246,7 +246,7 @@ class TristanEventProducer(object):
 
     def running(self):
         if self._sent_packets != self._last_log:
-            print("PACKETS SENT : {}    TO SEND : {}".format(self._sent_packets, self._packets_to_send))
+            logging.info("PACKETS SENT : {}    TO SEND : {}".format(self._sent_packets, self._packets_to_send))
             self._last_log = self._sent_packets
         return self._sent_packets != self._packets_to_send
 
@@ -279,7 +279,7 @@ class TristanEventProducer(object):
                 #self._packets.append(pkt.to_packet())
                 #self._ts.append(self._pkt_number)
                 self._pkt_number += 1
-            print("Generated time slice {}".format(time_slice))
+            logging.debug("Generated time slice {}".format(time_slice))
             self._time_slices.append(time_slice_dict)
             time_slice += 1
             TristanData.PACKET_NUMBER=0
@@ -367,7 +367,7 @@ class TristanEventProducer(object):
         idle_bytes_sent = 0
         idle_packets_sent = 0
         logging.info("Sending %d idle packets at 1 Hz", self.defaults.num_idle)
-        # Start by sending Idle packets at a rate of 1Hz
+        # End by sending Idle packets at a rate of 1Hz
         for packets in range(int(self.defaults.num_idle)):
             # Send the packet over the UDP socket
             try:

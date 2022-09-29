@@ -36,7 +36,7 @@ class LATRDMessage(object):
             try:
                 self._attrs = json.loads(from_str)
                 
-            except ValueError, e:
+            except ValueError as e:
                 raise LATRDMessageException("Illegal message JSON format: " + str(e))
 
     @property
@@ -62,7 +62,7 @@ class LATRDMessage(object):
     def get_param(self, param_name):
         try:
             param_value = self._attrs[self.MSG_PARAMETERS][param_name]
-        except KeyError, e:
+        except KeyError as e:
             raise LATRDMessageException("Missing parameter " + param_name)
 
         return param_value
@@ -73,8 +73,9 @@ class LATRDMessage(object):
             
         self._attrs[self.MSG_PARAMETERS][param_name] = param_value
         
+    # @return a bytes-like object, not a string.
     def encode(self):
-        return json.dumps(self._attrs)
+        return json.dumps(self._attrs).encode();
     
     def __eq__(self, other):
         return self._attrs == other.attrs
@@ -88,7 +89,7 @@ class LATRDMessage(object):
     def _get_attr(self, attr_name):
         try:
             attr_value = self._attrs[attr_name]
-        except KeyError, e:
+        except KeyError as e:
             raise LATRDMessageException("Missing attribute " + attr_name)
 
         return attr_value

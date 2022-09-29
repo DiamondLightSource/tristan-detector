@@ -7,8 +7,8 @@ import json
 import logging
 import time
 import threading
-from latrd_channel import LATRDChannel
-from latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage
+from .latrd_channel import LATRDChannel
+from .latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage
 from odin.adapters.adapter import ApiAdapter, ApiAdapterResponse, request_types, response_types
 from tornado import escape
 from tornado.ioloop import IOLoop
@@ -446,7 +446,7 @@ class TristanControlAdapter(ApiAdapter):
             request_command = self.ADODIN_MAPPING[request_command]
         if not request_command:
             # All status items have been requested, so return full tree
-            key_list = self._kwargs.keys()
+            key_list = list(self._kwargs.keys())
             for status in self._parameters['status']:
                 for key in status:
                     if key not in key_list:

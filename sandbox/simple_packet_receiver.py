@@ -27,15 +27,15 @@ def main():
     # up to the server to sort this out!)
     while True:
         data,addr = server.recvfrom(8192)
-        print len(data),addr
+        print(len(data),addr)
         packet = TimepixPacket(0)
         packet.from_bytes(data)
         packet.report()
         byte_val = bytearray(data)
         #print byte_val[0],byte_val[1],byte_val[2],byte_val[3],byte_val[4],byte_val[5],byte_val[6]
-        print "ID: ", ((int(byte_val[1])&0xFC)>>2)
+        print("ID: ", ((int(byte_val[1])&0xFC)>>2))
 
-        print "Received packet %.6f" % (time.time())
+        print("Received packet %.6f" % (time.time()))
 
 if __name__ == "__main__":
     main()

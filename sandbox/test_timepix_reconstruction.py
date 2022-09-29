@@ -25,17 +25,17 @@ def main():
     if not os.path.exists(multi_file_dir):
         os.makedirs(multi_file_dir)
 
-    print "Parsing events to create single raw data file"
+    print("Parsing events to create single raw data file")
     # Firstly create a single raw data file with all events recorded
     sf = TimepixDataParser(1, args.datadir, single_file_dir)
     sf.execute(args.samples)
 
-    print "Parsing events to create multiple SWMR data files split by random sized time slices"
+    print("Parsing events to create multiple SWMR data files split by random sized time slices")
     # Now create the multiple dataset files
     mf = TimepixDataParser(args.files, args.datadir, multi_file_dir)
     mf.execute(args.samples)
 
-    print "Creating the intermediate VDS files and the high level full reconstruction VDS file"
+    print("Creating the intermediate VDS files and the high level full reconstruction VDS file")
     # Execute the VDS writer to create the intermediate and top level VDS files
     vf = TimepixVdsWriter(args.files, multi_file_dir, args.blocksize)
     vf.execute(args.samples)
@@ -48,22 +48,22 @@ def main():
     vds_event_id_dset = vds_file["/entry/data/event/event_id"]
 
     passed = True
-    print "Validating high level VDS dataset against raw data file"
+    print("Validating high level VDS dataset against raw data file")
     for index in range(0, raw_event_id_dset.shape[0]):
         if (index+1) % 2000 == 0:
-            print ".",
+            print(".", end=' ')
             sys.stdout.flush()
         if (index+1) % 50000 == 0:
-            print("Checked", index+1)
+            print(("Checked", index+1))
 
         if raw_event_id_dset[index] != vds_event_id_dset[index]:
             passed = False
             print("*** Error data mismatch")
 
     if passed == True:
-        print "All validation checks passed"
+        print("All validation checks passed")
     else:
-        print "Validation failed"
+        print("Validation failed")
 
 
 if __name__ == "__main__":

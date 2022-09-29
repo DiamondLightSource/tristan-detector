@@ -3,18 +3,18 @@ Created on 20 May 2016
 
 @author: Alan Greer
 """
-from __future__ import print_function
+
 
 import argparse
 import logging
 import time
 import threading
 import subprocess
-from latrd_channel import LATRDChannel
-from latrd_message import LATRDMessageException, LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
-from latrd_reactor import LATRDReactor
-from tristan_control_adapter import TriggerInType, TriggerOutType, TriggerTimestampType, TriggerInTerminationType, TriggerOutTerminationType, TriggerClockSourceType, TriggerTZeroType
-from event_simulator import TristanEventProducer
+from .latrd_channel import LATRDChannel
+from .latrd_message import LATRDMessageException, LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
+from .latrd_reactor import LATRDReactor
+from .tristan_adapter import TriggerInType, TriggerOutType, TriggerTimestampType, TriggerInTerminationType, TriggerOutTerminationType, TriggerClockSourceType, TriggerTZeroType
+from .event_simulator import TristanEventProducer
 
 class LATRDControlSimulator(object):
     DETECTOR_1M  = 1

@@ -3,7 +3,7 @@ import datetime
 
 import logging
 
-from latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
+from .latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
 
 
 class LATRDReactorTimer:
@@ -108,8 +108,8 @@ class LATRDReactor:
                             self._callbacks[sock]()
                         except Exception as e:
                             # TODO: How to handle an exception here
-                            self._log.debug("Caught reactor exception")
-                            #self._log.exception(e)
+                            self._log.debug("Caught exception in reactor-callback function")
+                            self._log.exception(e)
 
                 for timer in self._timers:
                     if self._timers[timer].has_fired():

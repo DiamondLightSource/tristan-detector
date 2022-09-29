@@ -189,7 +189,7 @@ class TimepixVdsWriter(object):
         create_top_level_VDS_file("timepix_vds.h5", self._src_dir, block_size=block_size)
 
     def execute(self, samples):
-        print "Working ",
+        print("Working ", end=' ')
         sys.stdout.flush()
         eof = False
         count = 0
@@ -243,7 +243,7 @@ class TimepixVdsWriter(object):
             if count >= samples:
                 eof = True
 
-        print ""
+        print("")
         for fn in range(0, self._num_files):
             self._nx_files[fn].close()
 

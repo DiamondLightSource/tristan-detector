@@ -1,9 +1,9 @@
 import random
 import zmq
 from zmq import ZMQError
-from zmq.utils.strtypes import unicode, cast_bytes
+from zmq.utils.strtypes import cast_bytes
 
-from latrd_message import LATRDMessage
+from .latrd_message import LATRDMessage
 
 class LATRDChannelException(Exception):
     
@@ -71,7 +71,7 @@ class LATRDChannel(object):
         if isinstance(data, LATRDMessage):
             data = data.encode()
         try:
-            self.socket.send_string(data, zmq.NOBLOCK)
+            self.socket.send(data, flags = zmq.NOBLOCK)
         except ZMQError:
             # We will get a ZMQError if the detector is not available because we are in NOBLOCK mode
             status = -1
