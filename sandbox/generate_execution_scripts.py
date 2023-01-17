@@ -217,12 +217,12 @@ endpoint = tcp://192.168.0.34:5000\n\
 firmware = 0.0.1\n\
 \n\
 [adapter.fr]\n\
-module = odin_data.frame_processor_adapter.OdinDataAdapter\n\
+module = odin_data.control.frame_processor_adapter.OdinDataAdapter\n\
 endpoints = {}\n\
 update_interval = 0.5\n\
 \n\
 [adapter.fp]\n\
-module = odin_data.frame_processor_adapter.FrameProcessorAdapter\n\
+module = odin_data.control.frame_processor_adapter.FrameProcessorAdapter\n\
 endpoints = {}\n\
 update_interval = 0.5\n\n'.format(fr_endpoint, fp_endpoint)
   with open(os.path.join(out_dir, 'tristan_odin.cfg'), 'w') as outfile:
