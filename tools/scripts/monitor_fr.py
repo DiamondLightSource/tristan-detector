@@ -7,8 +7,8 @@ import json
 import curses
 
 import os
-from odin_data.ipc_client import IpcClient
-from odin_data.ipc_message import IpcMessage
+from odin_data.control.ipc_client import IpcClient
+from odin_data.control.ipc_message import IpcMessage
 
 
 def send_configuration(self, config, target):
