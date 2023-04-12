@@ -48,7 +48,7 @@ class TimepixDataParser(object):
 
     def execute(self, samples):
         eof = False
-        print "Working ",
+        print("Working ", end=' ')
         sys.stdout.flush()
         while not eof:
 
@@ -126,12 +126,12 @@ class TimepixDataParser(object):
 
             if self._count % 2000 == 0:
                 if self._timestamp_course > 0 and self._prev_timestamp_course > 0:
-                    print ".",
+                    print(".", end=' ')
                     sys.stdout.flush()
 
             if self._count == samples:
                 eof = True
 
-        print ""
+        print("")
         for fn in range(0, self._num_files):
             self._nx_files[fn].close()

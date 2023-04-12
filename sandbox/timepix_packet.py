@@ -46,8 +46,8 @@ class TimepixPacket(object):
 
     def report(self):
         self.create_header()
-        print "{0:0{1}x}".format(self._header1,16).upper()
-        print "{0:0{1}x}".format(self._header2,16).upper()
+        print("{0:0{1}x}".format(self._header1,16).upper())
+        print("{0:0{1}x}".format(self._header2,16).upper())
         for word in self._data:
-            print "{0:0{1}x}".format(word,16).upper()
+            print("{0:0{1}x}".format(word,16).upper())
 

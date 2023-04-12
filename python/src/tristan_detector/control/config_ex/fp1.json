@@ -1,0 +1,159 @@
+[
+  {
+    "fr_setup": {
+      "fr_ready_cnxn": "tcp://127.0.0.1:10001",
+      "fr_release_cnxn": "tcp://127.0.0.1:10002"
+    },
+    "meta_endpoint": "tcp://*:10008"
+  },
+  {
+    "plugin": {
+      "load": {
+        "index": "tristan", 
+        "name": "LATRDProcessPlugin", 
+        "library": "/dls_sw/work/tools/RHEL7-x86_64/tristan-detector/prefix/lib/libLATRDProcessPlugin.so"
+      }
+    }
+  },
+  {
+    "plugin": {
+      "load": {
+        "index": "hdf", 
+        "name": "FileWriterPlugin", 
+        "library": "/dls_sw/prod/tools/RHEL7-x86_64/odin-data/1-4-0dls3/prefix/lib/libHdf5Plugin.so"
+      }
+    }
+  },
+  {
+    "plugin": {
+      "connect": {
+        "index": "tristan", 
+        "connection": "frame_receiver"
+      }
+    }
+  },
+  {
+    "plugin": {
+      "connect": {
+        "index": "hdf", 
+        "connection": "tristan"
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "data": {
+          "datatype": "uint32", 
+          "chunks": [1]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "raw_data": {
+          "datatype": "uint64", 
+          "chunks": [524288]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "event_id": {
+          "datatype": "uint32", 
+          "chunks": [524288]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "event_time_offset": {
+          "datatype": "uint64", 
+          "chunks": [524288]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "event_energy": {
+          "datatype": "uint32", 
+          "chunks": [524288]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "image": {
+          "datatype": "uint16", 
+          "dims": [512, 2048], 
+          "chunks": [1, 512, 2048]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "cue_timestamp_zero": {
+          "datatype": "uint64", 
+          "chunks": [524288]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "cue_id": {
+          "datatype": "uint16", 
+          "chunks": [524288]
+        }
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": {
+        "time_slice": {
+          "datatype": "uint32", 
+          "chunks": [40]
+        }
+      }
+    }
+  },
+  {
+    "tristan": {
+      "process": {
+        "number": 8, 
+        "rank": 0
+      }, 
+      "sensor": {
+        "width": 4096, 
+        "height": 2560
+      }
+    }
+  },
+  {
+    "hdf": {
+      "process": {
+        "number": 8, 
+        "rank": 0
+      }
+    }
+  },
+  {
+    "hdf": {
+      "dataset": "data"
+    }
+  }
+]

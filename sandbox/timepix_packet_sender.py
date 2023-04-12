@@ -32,7 +32,7 @@ class TimepixPacketSender(object):
             self._host.append(host)
             self._port.append(int(port))
 
-        print "Starting LATRD data transmission to:", self._host
+        print("Starting LATRD data transmission to:", self._host)
         # Open UDP socket
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 

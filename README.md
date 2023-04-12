@@ -1,46 +1,40 @@
-# LATRD
-Large Area Time Resolved Detector
+# Tristan Detector
 
-Python Control Software Instructions
-==========================================
+## Python Control Software Instructions
 
 System dependencies:
 
-    Python (2.7)
+    Python3
     pip - python package manager
     ZeroMQ (development package)
 
-Building with setuptools will attempt to use pip to download and install dependencies locally first. The python dependencies are listed in control_requirements.txt
-
 To install the example control script and simulator
 
-    virtualenv -p <path to python2.7> --no-site-packages venv27
-    source venv27/bin/activate
+    python3 -m venv venv
+    source venv/bin/activate
     pip install --upgrade pip
-    pip install --upgrade virtualenv
-    pip install -r control_requirements.txt
-    python setup.py install
+    pip install -e ./python
+
+To execute the tristan control server
+
+    tristan_control
+
+To execute the tristan meta writer
+
+    tristan_meta_writer
 
 To execute the simulator
 
-    source venv27/bin/activate
-    latrd-simulator
+    tristan_simulator
 
-and to run the example test client script
+## C++ Build Instructions
 
-    source venv27/bin/activate
-    test-control-interface
-
-
-
-Build Instructions
-==================
-
-	mkdir build
-	cd build
+	mkdir builddir
+	cd builddir
 	cmake -DBoost_NO_BOOST_CMAKE=ON \
-	      -DLOG4CXX_ROOT_DIR=/dls_sw/prod/tools/RHEL6-x86_64/log4cxx/0-10-0/prefix \
-	      -DZEROMQ_ROOTDIR=/dls_sw/prod/tools/RHEL6-x86_64/zeromq/3-2-4/prefix \
+	      -DLOG4CXX_ROOT_DIR=/dls_sw/prod/tools/RHEL7-x86_64/log4cxx/version/prefix \
+	      -DZEROMQ_ROOTDIR=/dls_sw/prod/tools/RHEL7-x86_64/zeromq/version/prefix \
 	      -DODINDATA_ROOT_DIR=/home/gnx91527/work/odin-data/build \
-	      -DHDF5_ROOT=/dls_sw/prod/tools/RHEL6-x86_64/hdf5/1-10-0/prefix \
+	      -DHDF5_ROOT=/dls_sw/prod/tools/RHEL7-x86_64/hdf5/version/prefix \
 	      ..
+

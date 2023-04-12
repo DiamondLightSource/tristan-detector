@@ -16,7 +16,7 @@ try:
     from numpy import *
 
 except:
-    print "Unexpected error:", sys.exc_info()[0]
+    print("Unexpected error:", sys.exc_info()[0])
     raise
 
 
@@ -46,12 +46,12 @@ def main():
     vds_event_id_dset = vds_file["/entry/data/event/event_id"]
 
     passed = True
-    print "Validating high level VDS dataset against raw data file"
+    print("Validating high level VDS dataset against raw data file")
     print("Raw dset size: {}".format(raw_event_id_dset.shape[0]))
     print("VDS dset size: {}".format(vds_event_id_dset.shape[0]))
     for index in range(0, raw_event_id_dset.shape[0]):
         if (index+1) % 2000 == 0:
-            print ".",
+            print(".", end=' ')
             sys.stdout.flush()
         if (index+1) % 50000 == 0:
             print("Checked", index+1)
@@ -65,9 +65,9 @@ def main():
             #break
 
     if passed == True:
-        print "All validation checks passed"
+        print("All validation checks passed")
     else:
-        print "Validation failed"
+        print("Validation failed")
 
 
 if __name__ == "__main__":
