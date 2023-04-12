@@ -1,8 +1,6 @@
+# Tristan Detector
 
-Tristan Detector
-
-Python Control Software Instructions
-==========================================
+## Python Control Software Instructions
 
 System dependencies:
 
@@ -10,35 +8,26 @@ System dependencies:
     pip - python package manager
     ZeroMQ (development package)
 
-Building with setuptools will attempt to use pip to download and install dependencies locally first. The python dependencies are listed in control_requirements.txt
-
 To install the example control script and simulator
 
-    virtualenv -p <path to python3> --no-site-packages venv3
-    source venv3/bin/activate
+    python3 -m venv venv
+    source venv/bin/activate
     pip install --upgrade pip
-    pip install --upgrade virtualenv
-    pip install -r control_requirements.txt
-    python setup.py install
+    pip install -e ./python
+
+To execute the tristan control server
+
+    tristan_control
+
+To execute the tristan meta writer
+
+    tristan_meta_writer
 
 To execute the simulator
 
-    source venv3/bin/activate
-    tristan-simulator
+    tristan_simulator
 
-and to run the example test client script
-
-    source venv3/bin/activate
-    test-control-interface
-
-note that the static directory is necessary for odin_control, and is packaged as part of the wheel for convenience,
-but you should MOVE it from your virtual environment to a position close to your odin-tristan.cfg file.
-eg. venv3/lib/python3.7/site-packages/tristan-detector/static to ~/tristan/static
-
-
-
-Build Instructions
-==================
+## C++ Build Instructions
 
 	mkdir builddir
 	cd builddir
