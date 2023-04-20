@@ -10,7 +10,6 @@ namespace FrameProcessor {
   LATRDProcessIntegral::LATRDProcessIntegral() :
       width_(0),
       height_(0),
-      base_image_counter_(0),
       total_count_(0),
       next_frame_id_(1),
       next_packet_id_(0)
@@ -53,14 +52,12 @@ namespace FrameProcessor {
 
     // Test for idle frames.
     if (hdrPtr->idle_frame == 1){
-      LOG4CXX_DEBUG_LEVEL(2, logger_, "Count mode IDLE frame detected");
+      LOG4CXX_DEBUG_LEVEL(3, logger_, "Count mode IDLE frame detected");
 
       // This is an idle frame
       // First we need to process any outstanding image frames, and then reset the image counter
-      uint32_t image_counter = base_image_counter_ - 1;
       std::map<uint64_t, boost::shared_ptr<LATRDImage> >::iterator iter;
       for (iter = image_store_.begin(); iter != image_store_.end(); ++iter){
-        image_counter++;
           if (iter->second->get_sent()==false) {
             LOG4CXX_DEBUG_LEVEL(2, logger_,
                           "Creating image frame " << iter->second->get_frame_number() << " from raw buffer " << frame->get_frame_number());
@@ -69,16 +66,14 @@ namespace FrameProcessor {
 
             iter->second->mark_sent();
           }
-          iter->second->reset();
       }
       image_store_.clear();
 
-      // and reset the image counter
-      base_image_counter_ = 0;
       // and reset the expected frame ID
       next_frame_id_ = 1;
 
     } else {
+      // note that the use of frame_to_image is single-threaded
       out_frames = frame_to_image(frame);
     }
     return out_frames;
@@ -158,6 +153,7 @@ namespace FrameProcessor {
               image_store_[image_number] = image_job_ptr;
             }
 
+            image_job_ptr->set_packet_seen(packet_id);
             // Start from index 3 as we can ignore the header words and extended timestamp
             for (uint16_t index = 3; index < word_count; index++) {
               uint32_t x_pos = 0;
@@ -177,7 +173,7 @@ namespace FrameProcessor {
                                         &i_tot,
                                         &event_count)) {
                     // Add the event count to the 2D image
-                    image_job_ptr->set_pixel(packet_id, x_pos, y_pos, event_count);
+                    image_job_ptr->add_pixel(x_pos, y_pos, event_count);
                     total_count_ += event_count;
                   }
                 }
@@ -197,41 +193,32 @@ namespace FrameProcessor {
       payload_ptr += LATRD::primary_packet_size;
     }
     // After processing all of the packets, loop through the job map and see if we can pass out any frames
-    uint32_t image_counter = base_image_counter_ - 1;
-    std::vector<uint64_t> delete_image_vector;
+    std::vector<uint64_t> delete_image_ids;
     std::map<uint64_t, boost::shared_ptr<LATRDImage> >::iterator iter;
     for (iter = image_store_.begin(); iter != image_store_.end(); ++iter){
-        image_counter++;
         if (iter->second->verify_image()){
           if (!iter->second->get_sent()) {
-            LOG4CXX_DEBUG_LEVEL(2, logger_,
-                          "Creating image frame " << iter->second->get_frame_number() << " from raw buffer " << frame->get_frame_number());
             boost::shared_ptr<Frame> out_frame = iter->second->to_frame();
+            LOG4CXX_DEBUG_LEVEL(2, logger_,
+                          "Pushing frame for image #" << iter->second->get_frame_number());
             image_frames.push_back(out_frame);
 
             iter->second->mark_sent();
           }
-          // Mark the frame for deletion
-          delete_image_vector.push_back(iter->first);
+          // Mark the frame for deletion; this can be done here but isn't.
+          delete_image_ids.push_back(iter->first);
         }
     }
     std::vector<uint64_t>::iterator del_iter;
-    for (del_iter = delete_image_vector.begin(); del_iter != delete_image_vector.end(); ++del_iter){
-        if (image_store_.begin()->first == *del_iter){
-            // Reset the job
-            image_store_[*del_iter]->reset();
-            // Delete the job
-            image_store_.erase(*del_iter);
-            // Increment the base
-            base_image_counter_++;
-        }
+    for (del_iter = delete_image_ids.begin(); del_iter != delete_image_ids.end(); ++del_iter){
+      image_store_.erase(*del_iter);
     }
 
 
     return image_frames;
   }
 
-  bool LATRDProcessIntegral::process_data_word(uint64_t data_word,
+  inline bool LATRDProcessIntegral::process_data_word(uint64_t data_word,
                                                uint32_t *chip_x,
                                                uint32_t *chip_y,
                                                uint32_t *i_tot,

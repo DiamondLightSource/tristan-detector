@@ -3,24 +3,41 @@
 //
 #include "LATRDImage.h"
 #include "FrameMetaData.h"
-#include "DataBlockFrame.h"
 
 namespace FrameProcessor {
 
     LATRDImage::LATRDImage(uint32_t width, uint32_t height, uint32_t number)
     {
-      width_ = width;
-      height_ = height;
-      frame_number_ = number;
-      image_ptr_ = (uint16_t *)malloc(width * height * sizeof(uint16_t));
-      eoi_packet_id_ = -1;
-      sent_ = false;
-      this->reset();
+      logger_ = Logger::getLogger("FP.LATRDImage");
+      this->reset(width, height);
+      image_number_ = number;
+      LOG4CXX_DEBUG_LEVEL(2, logger_, "creating LATRD buffer for frame #" << image_number_);
     }
 
     LATRDImage::~LATRDImage()
     {
-      free(image_ptr_);
+      LOG4CXX_DEBUG_LEVEL(2, logger_, "destroying LATRD buffer for frame #" << image_number_);
+    }
+
+    void LATRDImage::reset(uint32_t width, uint32_t height)
+    {
+      FrameMetaData frame_meta;
+      width_ = width;
+      height_ = height;
+      uint32_t size_of_image = width_ * height_ * sizeof(uint16_t);
+      out_frame_.reset(new DataBlockFrame(frame_meta, size_of_image));
+      // get_image_ptr returns a void*.
+      image_ptr_ = static_cast<uint16_t*>(out_frame_->get_image_ptr());
+      // We need to zero the memory block
+      memset(image_ptr_, 0, size_of_image);
+      // Reset the largest_packet_id
+      eoi_packet_id_ = -1;
+      // Reset the packet id map
+      packet_ids_.clear();
+      // Reset the sent flag
+      sent_ = false;
+
+      image_number_ = 0;
     }
 
     void LATRDImage::set_eoi(uint32_t packet_id)
@@ -30,19 +47,7 @@ namespace FrameProcessor {
 
     uint32_t LATRDImage::get_frame_number()
     {
-        return frame_number_;
-    }
-
-    void LATRDImage::set_pixel(uint32_t packet_id, uint32_t x, uint32_t y, uint32_t event_count)
-    {
-      // Calculate the data index
-      uint32_t data_index = x + (y * width_);
-      // Record the event count into the correct pixel
-//      printf("Recording [%u] index [%u, %u] event count [%u]\n", packet_id, x, y, event_count);
-      image_ptr_[data_index] += (uint16_t)event_count;
-//      printf("image_ptr_[%u] = %u\n", data_index, image_ptr_[data_index]);
-      // Record the packet number
-      set_packet_seen(packet_id);
+        return image_number_;
     }
 
     void LATRDImage::set_packet_seen(uint32_t packet_id)
@@ -64,6 +69,7 @@ namespace FrameProcessor {
           for (uint32_t index = 0; index < eoi_packet_id_; index++){
             if (packet_ids_.count(index) == 0){
               verified = false;
+              LOG4CXX_DEBUG_LEVEL(0, logger_, "image " << image_number_ << " is missing packet #" << index << " of " << eoi_packet_id_ << "; keep it.");
               break;
             }
           }
@@ -76,37 +82,20 @@ namespace FrameProcessor {
       // Create the frame object to wrap the image
   		// Create and populate metadata for the re-ordered frame
       FrameMetaData frame_meta;
-      std::vector<dimsize_t> dims(0);
+      std::vector<dimsize_t> dims;
       dims.push_back(height_);
       dims.push_back(width_);
       frame_meta.set_dimensions(dims);
       frame_meta.set_dataset_name("image");
       frame_meta.set_data_type(FrameProcessor::raw_16bit);
       frame_meta.set_compression_type(FrameProcessor::no_compression);
-      boost::shared_ptr<Frame> out_frame = boost::shared_ptr<Frame>(new DataBlockFrame(frame_meta, image_ptr_, width_ * height_ * sizeof(uint16_t)));
+      boost::shared_ptr<Frame> out_frame = out_frame_;
+      image_ptr_ = NULL;
+      out_frame->set_meta_data(frame_meta);
+      out_frame->set_frame_number(image_number_);
 
-//      boost::shared_ptr<Frame> out_frame = boost::shared_ptr<Frame>(new Frame("image"));
-//      out_frame->copy_data(image_ptr_, width_ * height_ * sizeof(uint16_t));
-      out_frame->set_frame_number(frame_number_);
-//      std::vector<dimsize_t> dims(0);
-//      dims.push_back(height_);
-//      dims.push_back(width_);
-//      out_frame->set_dataset_name("image");
-//      out_frame->set_data_type(1);
-//      out_frame->set_dimensions(dims);
+      LOG4CXX_DEBUG_LEVEL(2, logger_, "fetching LATRD buffer for frame #" << image_number_);
       return out_frame;
-    }
-
-    void LATRDImage::reset()
-    {
-      // We need to reset the memory block
-      memset(image_ptr_, 0, (width_ * height_ * sizeof(uint16_t)));
-      // Reset the largest_packet_id
-      eoi_packet_id_ = -1;
-      // Reset the packet id map
-      packet_ids_.clear();
-      // Reset the sent flag
-      sent_ = false;
     }
 
     void LATRDImage::mark_sent()

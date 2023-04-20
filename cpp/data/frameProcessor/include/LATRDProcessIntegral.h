@@ -61,7 +61,6 @@ namespace FrameProcessor {
 
     uint32_t width_;
     uint32_t height_;
-    uint32_t base_image_counter_;
     uint32_t total_count_;
     uint32_t next_frame_id_;
     uint32_t next_packet_id_;
