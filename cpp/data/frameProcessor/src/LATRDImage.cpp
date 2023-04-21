@@ -24,6 +24,7 @@ namespace FrameProcessor {
       FrameMetaData frame_meta;
       width_ = width;
       height_ = height;
+      image_qty_ = width * height;
       uint32_t size_of_image = width_ * height_ * sizeof(uint16_t);
       out_frame_.reset(new DataBlockFrame(frame_meta, size_of_image));
       // get_image_ptr returns a void*.
