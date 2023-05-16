@@ -39,6 +39,20 @@ namespace FrameProcessor {
         }
       }
 
+      void log_pixel(uint32_t x, uint32_t y)
+      {
+        uint32_t data_index = x + (y * width_);
+        uint16_t* img_ptr = (uint16_t*)out_frame_->get_image_ptr();
+        if(x < width_ && y < height_)
+        {
+          LOG4CXX_INFO(logger_, "pixel " << x << "," << y << " is " << img_ptr[data_index]);
+        }
+        else
+        {
+          LOG4CXX_INFO(logger_, "pixel " << x << "," << y << " is out of range");
+        }
+      }
+
       void set_packet_seen(uint32_t packet_id);
       bool verify_image();
       boost::shared_ptr<Frame> to_frame();

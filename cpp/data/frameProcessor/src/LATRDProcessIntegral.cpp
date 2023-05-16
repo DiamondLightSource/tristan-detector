@@ -30,6 +30,7 @@ namespace FrameProcessor {
     next_frame_id_ = 1;
     next_packet_id_ = 0;
 
+    LOG4CXX_DEBUG_LEVEL(0, logger_, "width, height set to " << width << "," << height);
     reset_image();
   }
 
@@ -170,8 +171,13 @@ namespace FrameProcessor {
                                         &i_tot,
                                         &event_count)) {
                     // Add the event count to the 2D image
+                    LOG4CXX_DEBUG_LEVEL(4, logger_, "incrementing pixel at " <<  x_pos-origin_x_ << " " <<  y_pos-origin_y_ << " by " << event_count);
                     image_job_ptr->add_pixel(x_pos-origin_x_, y_pos-origin_y_, event_count);
                     total_count_ += event_count;
+                  }
+                  else
+                  {
+                    LOG4CXX_DEBUG_LEVEL(4, logger_, "found a non-integral data word");
                   }
                 }
               }
@@ -210,7 +216,6 @@ namespace FrameProcessor {
     for (del_iter = delete_image_ids.begin(); del_iter != delete_image_ids.end(); ++del_iter){
       image_store_.erase(*del_iter);
     }
-
 
     return image_frames;
   }
@@ -265,5 +270,7 @@ namespace FrameProcessor {
   {
     origin_x_ = x;
     origin_y_ = y;
+    LOG4CXX_DEBUG_LEVEL(0, logger_,
+                          "Origin set to [" << origin_x_ << "," << origin_y_ << "]");
   }
 }
