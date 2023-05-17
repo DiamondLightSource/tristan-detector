@@ -29,17 +29,14 @@ namespace FrameProcessor {
     height_ = height;
     next_frame_id_ = 1;
     next_packet_id_ = 0;
-    if (image_ptr_){
-      free(image_ptr_);
-    }
-    image_ptr_ = (uint16_t *)malloc(width_ * height_ * sizeof(uint16_t));
+
     reset_image();
   }
 
   void LATRDProcessIntegral::reset_image()
   {
-    LOG4CXX_DEBUG_LEVEL(2, logger_, "Resetting image memory");
-    memset(image_ptr_, 0, (width_ * height_ * sizeof(uint16_t)));
+    LOG4CXX_DEBUG_LEVEL(2, logger_, "Resetting");
+
     total_count_ = 0;
   }
 
@@ -173,7 +170,7 @@ namespace FrameProcessor {
                                         &i_tot,
                                         &event_count)) {
                     // Add the event count to the 2D image
-                    image_job_ptr->add_pixel(x_pos, y_pos, event_count);
+                    image_job_ptr->add_pixel(x_pos-origin_x_, y_pos-origin_y_, event_count);
                     total_count_ += event_count;
                   }
                 }
@@ -264,4 +261,9 @@ namespace FrameProcessor {
     return false;
   }
 
+  void LATRDProcessIntegral::set_origin(int x, int y)
+  {
+    origin_x_ = x;
+    origin_y_ = y;
+  }
 }

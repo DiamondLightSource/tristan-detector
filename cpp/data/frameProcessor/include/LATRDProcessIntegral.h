@@ -54,6 +54,7 @@ namespace FrameProcessor {
     uint64_t get_course_timestamp(uint64_t data_word);
     bool check_for_final_packet_word(uint64_t data_word);
     bool check_for_integral_data_word(uint64_t data_word);
+    void set_origin(int x, int y);
 
   private:
     /** Pointer to logger */
@@ -61,10 +62,12 @@ namespace FrameProcessor {
 
     uint32_t width_;
     uint32_t height_;
+    int origin_x_;
+    int origin_y_;
     uint32_t total_count_;
     uint32_t next_frame_id_;
     uint32_t next_packet_id_;
-    uint16_t *image_ptr_;
+
     std::map<uint32_t, boost::shared_ptr<Frame> > frame_store_;
     std::map<uint64_t, boost::shared_ptr<LATRDImage> > image_store_;
   };
