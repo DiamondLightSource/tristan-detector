@@ -4,6 +4,7 @@
 #include "LATRDDefinitions.h"
 #include "LATRDProcessIntegral.h"
 #include "LATRDExceptions.h"
+#include "DebugLevelLogger.h"
 
 namespace FrameProcessor {
   LATRDProcessIntegral::LATRDProcessIntegral() :
@@ -33,37 +34,38 @@ namespace FrameProcessor {
       free(image_ptr_);
     }
     image_ptr_ = (uint16_t *)malloc(width_ * height_ * sizeof(uint16_t));
+    reset_image();
   }
 
   void LATRDProcessIntegral::reset_image()
   {
-    LOG4CXX_DEBUG(logger_, "Resetting image memory");
+    LOG4CXX_DEBUG_LEVEL(2, logger_, "Resetting image memory");
     memset(image_ptr_, 0, (width_ * height_ * sizeof(uint16_t)));
     total_count_ = 0;
   }
 
   std::vector<boost::shared_ptr<Frame> > LATRDProcessIntegral::process_frame(boost::shared_ptr <Frame> frame)
   {
-    std::vector<boost::shared_ptr<Frame> > image_frames;
+    std::vector<boost::shared_ptr<Frame> > out_frames;
 
     // Extract the header from the buffer and print the details
     const LATRD::FrameHeader *hdrPtr = static_cast<const LATRD::FrameHeader *>(frame->get_data_ptr());
 
     // Test for idle frames.
     if (hdrPtr->idle_frame == 1){
-      LOG4CXX_DEBUG(logger_, "Count mode IDLE frame detected");
+      LOG4CXX_DEBUG_LEVEL(2, logger_, "Count mode IDLE frame detected");
 
       // This is an idle frame
       // First we need to process any outstanding image frames, and then reset the image counter
       uint32_t image_counter = base_image_counter_ - 1;
-      std::map<uint64_t, boost::shared_ptr<LATRDImageJob> >::iterator iter;
+      std::map<uint64_t, boost::shared_ptr<LATRDImage> >::iterator iter;
       for (iter = image_store_.begin(); iter != image_store_.end(); ++iter){
         image_counter++;
-          if (!iter->second->get_sent()) {
-            LOG4CXX_DEBUG(logger_,
+          if (iter->second->get_sent()==false) {
+            LOG4CXX_DEBUG_LEVEL(2, logger_,
                           "Creating image frame " << iter->second->get_frame_number() << " from raw buffer " << frame->get_frame_number());
             boost::shared_ptr<Frame> out_frame = iter->second->to_frame();
-            image_frames.push_back(out_frame);
+            out_frames.push_back(out_frame);
 
             iter->second->mark_sent();
           }
@@ -77,9 +79,9 @@ namespace FrameProcessor {
       next_frame_id_ = 1;
 
     } else {
-      image_frames = frame_to_image(frame);
+      out_frames = frame_to_image(frame);
     }
-    return image_frames;
+    return out_frames;
   }
 
   std::vector<boost::shared_ptr<Frame> > LATRDProcessIntegral::frame_to_image(boost::shared_ptr <Frame> frame)
@@ -138,20 +140,20 @@ namespace FrameProcessor {
           }
 
           if (!bad_packet) {
-            LOG4CXX_DEBUG(logger_,
+            LOG4CXX_DEBUG_LEVEL(2, logger_,
                           "Image [" << image_number << "] Pkt [" << packet_id << "] timestamp [" << packet_timestamp << "] word count " << word_count);
             data_word_ptr++;
 
             // Check if we have an image job for this packet's image number
-            boost::shared_ptr <LATRDImageJob> image_job_ptr;
+            boost::shared_ptr <LATRDImage> image_job_ptr;
             if (image_store_.count(image_number) > 0) {
-              LOG4CXX_DEBUG(logger_, "Image [" << image_number << "] found in store");
+              LOG4CXX_DEBUG_LEVEL(2, logger_, "Image [" << image_number << "] found in store");
               image_job_ptr = image_store_[image_number];
             } else {
               // We need to create a new image job for this packet
-              LOG4CXX_DEBUG(logger_, "First packet for image job [" << image_number << "] creating ImageJob object");
+              LOG4CXX_DEBUG_LEVEL(2, logger_, "First packet for image job [" << image_number << "] creating ImageJob object");
               // TODO: Check this is not an old packet
-              image_job_ptr = boost::shared_ptr<LATRDImageJob>(new LATRDImageJob(width_, height_, image_number));
+              image_job_ptr = boost::shared_ptr<LATRDImage>(new LATRDImage(width_, height_, image_number));
               // Store the image job in the store, index by timestamp
               image_store_[image_number] = image_job_ptr;
             }
@@ -166,8 +168,7 @@ namespace FrameProcessor {
               try {
                 // Check if the word is a final packet word
                 if (check_for_final_packet_word(*data_word_ptr)) {
-                  LOG4CXX_DEBUG(logger_, "Image [" << image_job_ptr->get_frame_number() << "] End Of Image on packet ["
-                                                   << packet_id << "]");
+                  LOG4CXX_DEBUG_LEVEL(2, logger_, "Image [" << image_number << "] End Of Image on packet [" << packet_id << "]");
                   image_job_ptr->set_eoi(packet_id);
                 } else {
                   if (process_data_word(*data_word_ptr,
@@ -176,7 +177,7 @@ namespace FrameProcessor {
                                         &i_tot,
                                         &event_count)) {
                     // Add the event count to the 2D image
-                    image_job_ptr->add_pixel(packet_id, x_pos, y_pos, event_count);
+                    image_job_ptr->set_pixel(packet_id, x_pos, y_pos, event_count);
                     total_count_ += event_count;
                   }
                 }
@@ -198,12 +199,12 @@ namespace FrameProcessor {
     // After processing all of the packets, loop through the job map and see if we can pass out any frames
     uint32_t image_counter = base_image_counter_ - 1;
     std::vector<uint64_t> delete_image_vector;
-    std::map<uint64_t, boost::shared_ptr<LATRDImageJob> >::iterator iter;
+    std::map<uint64_t, boost::shared_ptr<LATRDImage> >::iterator iter;
     for (iter = image_store_.begin(); iter != image_store_.end(); ++iter){
         image_counter++;
         if (iter->second->verify_image()){
           if (!iter->second->get_sent()) {
-            LOG4CXX_DEBUG(logger_,
+            LOG4CXX_DEBUG_LEVEL(2, logger_,
                           "Creating image frame " << iter->second->get_frame_number() << " from raw buffer " << frame->get_frame_number());
             boost::shared_ptr<Frame> out_frame = iter->second->to_frame();
             image_frames.push_back(out_frame);

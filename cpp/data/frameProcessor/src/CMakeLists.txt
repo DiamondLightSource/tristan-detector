@@ -9,7 +9,7 @@ add_library(LATRDProcessPlugin SHARED
 		LATRDProcessPlugin.cpp
 		LATRDProcessPluginLib.cpp
 		LATRDBuffer.cpp
-		LATRDImageJob.cpp
+		LATRDImage.cpp
 		LATRDProcessJob.cpp
 		LATRDProcessCoordinator.cpp
 		LATRDProcessIntegral.cpp

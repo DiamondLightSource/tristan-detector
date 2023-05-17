@@ -21,7 +21,7 @@ using namespace log4cxx::helpers;
 #include <map>
 
 #include "Frame.h"
-#include "LATRDImageJob.h"
+#include "LATRDImage.h"
 
 namespace FrameProcessor {
 
@@ -67,7 +67,7 @@ namespace FrameProcessor {
     uint32_t next_packet_id_;
     uint16_t *image_ptr_;
     std::map<uint32_t, boost::shared_ptr<Frame> > frame_store_;
-    std::map<uint64_t, boost::shared_ptr<LATRDImageJob> > image_store_;
+    std::map<uint64_t, boost::shared_ptr<LATRDImage> > image_store_;
   };
 
 

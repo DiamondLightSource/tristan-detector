@@ -55,7 +55,6 @@ LATRDProcessPlugin::LATRDProcessPlugin() :
     LOG4CXX_TRACE(logger_, "LATRDProcessPlugin constructor.");
 
     integral_.init(sensor_width_, sensor_height_);
-    integral_.reset_image();
 
     // Create the buffer managers
     rawBuffer_ = boost::shared_ptr<LATRDBuffer>(new LATRDBuffer(LATRD::frame_qty, "raw_data", UINT64_TYPE));
@@ -67,7 +66,7 @@ LATRDProcessPlugin::LATRDProcessPlugin() :
     // Init the idle packet timestamp to the current time
     gettime(&idle_timestamp_);
 
-  LOG4CXX_INFO(logger_, "LATRDProcessPlugin version " << this->get_version_long() << " loaded");
+  LOG4CXX_DEBUG(logger_, "LATRDProcessPlugin version " << this->get_version_long() << " loaded");
 }
 
 LATRDProcessPlugin::~LATRDProcessPlugin()
@@ -227,7 +226,6 @@ void LATRDProcessPlugin::configureSensor(OdinData::IpcMessage &config, OdinData:
   }
 
   integral_.init(this->sensor_width_, this->sensor_height_);
-  integral_.reset_image();
 }
 
 void LATRDProcessPlugin::configureFrameSize(OdinData::IpcMessage &config, OdinData::IpcMessage &reply)
@@ -310,6 +308,8 @@ void LATRDProcessPlugin::process_frame(boost::shared_ptr<Frame> frame)
       std::vector <boost::shared_ptr<Frame> > frames = integral_.process_frame(frame);
       std::vector <boost::shared_ptr<Frame> >::iterator iter;
       for (iter = frames.begin(); iter != frames.end(); ++iter) {
+        LOG4CXX_DEBUG_LEVEL(2, logger_, "Pushing dset " << (*iter)->get_meta_data().get_dataset_name() <<
+                                " frame number " << (*iter)->get_meta_data().get_frame_number() );
         this->push(*iter);
       }
     } else {

@@ -1,13 +1,13 @@
 //
 // Created by gnx91527 on 27/09/18.
 //
-#include "LATRDImageJob.h"
+#include "LATRDImage.h"
 #include "FrameMetaData.h"
 #include "DataBlockFrame.h"
 
 namespace FrameProcessor {
 
-    LATRDImageJob::LATRDImageJob(uint32_t width, uint32_t height, uint32_t number)
+    LATRDImage::LATRDImage(uint32_t width, uint32_t height, uint32_t number)
     {
       width_ = width;
       height_ = height;
@@ -18,22 +18,22 @@ namespace FrameProcessor {
       this->reset();
     }
 
-    LATRDImageJob::~LATRDImageJob()
+    LATRDImage::~LATRDImage()
     {
       free(image_ptr_);
     }
 
-    void LATRDImageJob::set_eoi(uint32_t packet_id)
+    void LATRDImage::set_eoi(uint32_t packet_id)
     {
         eoi_packet_id_ = (int32_t)packet_id;
     }
 
-    uint32_t LATRDImageJob::get_frame_number()
+    uint32_t LATRDImage::get_frame_number()
     {
         return frame_number_;
     }
 
-    void LATRDImageJob::add_pixel(uint32_t packet_id, uint32_t x, uint32_t y, uint32_t event_count)
+    void LATRDImage::set_pixel(uint32_t packet_id, uint32_t x, uint32_t y, uint32_t event_count)
     {
       // Calculate the data index
       uint32_t data_index = x + (y * width_);
@@ -42,10 +42,15 @@ namespace FrameProcessor {
       image_ptr_[data_index] += (uint16_t)event_count;
 //      printf("image_ptr_[%u] = %u\n", data_index, image_ptr_[data_index]);
       // Record the packet number
+      set_packet_seen(packet_id);
+    }
+
+    void LATRDImage::set_packet_seen(uint32_t packet_id)
+    {
       packet_ids_[packet_id] = 1;
     }
 
-    bool LATRDImageJob::verify_image()
+    bool LATRDImage::verify_image()
     {
         bool verified = true;
 
@@ -66,7 +71,7 @@ namespace FrameProcessor {
       return verified;
     }
 
-    boost::shared_ptr<Frame> LATRDImageJob::to_frame()
+    boost::shared_ptr<Frame> LATRDImage::to_frame()
     {
       // Create the frame object to wrap the image
   		// Create and populate metadata for the re-ordered frame
@@ -92,7 +97,7 @@ namespace FrameProcessor {
       return out_frame;
     }
 
-    void LATRDImageJob::reset()
+    void LATRDImage::reset()
     {
       // We need to reset the memory block
       memset(image_ptr_, 0, (width_ * height_ * sizeof(uint16_t)));
@@ -104,12 +109,12 @@ namespace FrameProcessor {
       sent_ = false;
     }
 
-    void LATRDImageJob::mark_sent()
+    void LATRDImage::mark_sent()
     {
         sent_ = true;
     }
 
-    bool LATRDImageJob::get_sent()
+    bool LATRDImage::get_sent()
     {
         return sent_;
     }

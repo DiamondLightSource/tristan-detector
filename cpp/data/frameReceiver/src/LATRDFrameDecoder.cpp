@@ -350,7 +350,7 @@ void LATRDFrameDecoder::monitor_buffers()
     }
     frames_timedout_ += frames_timedout;
 
-    LOG4CXX_DEBUG_LEVEL(2, logger_, get_num_mapped_buffers() << " frame buffers in use, "
+    LOG4CXX_DEBUG_LEVEL(4, logger_, get_num_mapped_buffers() << " frame buffers in use, "
             << get_num_empty_buffers() << " empty buffers available, "
             << frames_timedout_ << " incomplete frames timed out");
 
