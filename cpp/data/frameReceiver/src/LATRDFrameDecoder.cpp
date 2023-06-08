@@ -89,7 +89,6 @@ void LATRDFrameDecoder::log_packet(size_t bytes_received, int port, struct socka
     uint8_t timeSliceNumber = LATRD::get_time_slice_number(current_packet_header_.headerWord2);
     uint16_t wordCount = LATRD::get_word_count(current_packet_header_.headerWord1);
 
-    // Dump raw header if packet logging enabled
     if (enable_packet_logging_){
         std::stringstream ss;
         ss << "PktHdr: " << std::setw(15) << std::left << inet_ntoa(from_addr->sin_addr) << std::right << " "
@@ -139,7 +138,7 @@ void LATRDFrameDecoder::process_packet_header(size_t bytes_received, int port, s
 {
   //TODO validate header size and content, handle incoming new packet buffer allocation etc
 
-  //log_packet(bytes_received, port, from_addr);
+  log_packet(bytes_received, port, from_addr);
 
   // If we receive an IDLE frame then set the frame number to 0
     if ((*(((uint64_t *)raw_packet_header())+1)&LATRD::packet_header_idle_mask) == LATRD::packet_header_idle_mask){
@@ -350,7 +349,7 @@ void LATRDFrameDecoder::monitor_buffers()
     }
     frames_timedout_ += frames_timedout;
 
-    LOG4CXX_DEBUG_LEVEL(2, logger_, get_num_mapped_buffers() << " frame buffers in use, "
+    LOG4CXX_DEBUG_LEVEL(4, logger_, get_num_mapped_buffers() << " frame buffers in use, "
             << get_num_empty_buffers() << " empty buffers available, "
             << frames_timedout_ << " incomplete frames timed out");
 

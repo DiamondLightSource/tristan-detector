@@ -4,12 +4,12 @@
 #include "LATRDDefinitions.h"
 #include "LATRDProcessIntegral.h"
 #include "LATRDExceptions.h"
+#include "DebugLevelLogger.h"
 
 namespace FrameProcessor {
   LATRDProcessIntegral::LATRDProcessIntegral() :
       width_(0),
       height_(0),
-      base_image_counter_(0),
       total_count_(0),
       next_frame_id_(1),
       next_packet_id_(0)
@@ -29,57 +29,52 @@ namespace FrameProcessor {
     height_ = height;
     next_frame_id_ = 1;
     next_packet_id_ = 0;
-    if (image_ptr_){
-      free(image_ptr_);
-    }
-    image_ptr_ = (uint16_t *)malloc(width_ * height_ * sizeof(uint16_t));
+
+    LOG4CXX_DEBUG_LEVEL(0, logger_, "width, height set to " << width << "," << height);
+    reset_image();
   }
 
   void LATRDProcessIntegral::reset_image()
   {
-    LOG4CXX_DEBUG(logger_, "Resetting image memory");
-    memset(image_ptr_, 0, (width_ * height_ * sizeof(uint16_t)));
+    LOG4CXX_DEBUG_LEVEL(2, logger_, "Resetting");
+
     total_count_ = 0;
   }
 
   std::vector<boost::shared_ptr<Frame> > LATRDProcessIntegral::process_frame(boost::shared_ptr <Frame> frame)
   {
-    std::vector<boost::shared_ptr<Frame> > image_frames;
+    std::vector<boost::shared_ptr<Frame> > out_frames;
 
     // Extract the header from the buffer and print the details
     const LATRD::FrameHeader *hdrPtr = static_cast<const LATRD::FrameHeader *>(frame->get_data_ptr());
 
     // Test for idle frames.
     if (hdrPtr->idle_frame == 1){
-      LOG4CXX_DEBUG(logger_, "Count mode IDLE frame detected");
+      LOG4CXX_DEBUG_LEVEL(3, logger_, "Count mode IDLE frame detected");
 
       // This is an idle frame
       // First we need to process any outstanding image frames, and then reset the image counter
-      uint32_t image_counter = base_image_counter_ - 1;
-      std::map<uint64_t, boost::shared_ptr<LATRDImageJob> >::iterator iter;
+      std::map<uint64_t, boost::shared_ptr<LATRDImage> >::iterator iter;
       for (iter = image_store_.begin(); iter != image_store_.end(); ++iter){
-        image_counter++;
-          if (!iter->second->get_sent()) {
-            LOG4CXX_DEBUG(logger_,
+          if (iter->second->get_sent()==false) {
+            LOG4CXX_DEBUG_LEVEL(2, logger_,
                           "Creating image frame " << iter->second->get_frame_number() << " from raw buffer " << frame->get_frame_number());
             boost::shared_ptr<Frame> out_frame = iter->second->to_frame();
-            image_frames.push_back(out_frame);
+            out_frames.push_back(out_frame);
 
             iter->second->mark_sent();
           }
-          iter->second->reset();
       }
       image_store_.clear();
 
-      // and reset the image counter
-      base_image_counter_ = 0;
       // and reset the expected frame ID
       next_frame_id_ = 1;
 
     } else {
-      image_frames = frame_to_image(frame);
+      // note that the use of frame_to_image is single-threaded
+      out_frames = frame_to_image(frame);
     }
-    return image_frames;
+    return out_frames;
   }
 
   std::vector<boost::shared_ptr<Frame> > LATRDProcessIntegral::frame_to_image(boost::shared_ptr <Frame> frame)
@@ -138,24 +133,25 @@ namespace FrameProcessor {
           }
 
           if (!bad_packet) {
-            LOG4CXX_DEBUG(logger_,
+            LOG4CXX_DEBUG_LEVEL(2, logger_,
                           "Image [" << image_number << "] Pkt [" << packet_id << "] timestamp [" << packet_timestamp << "] word count " << word_count);
             data_word_ptr++;
 
             // Check if we have an image job for this packet's image number
-            boost::shared_ptr <LATRDImageJob> image_job_ptr;
+            boost::shared_ptr <LATRDImage> image_job_ptr;
             if (image_store_.count(image_number) > 0) {
-              LOG4CXX_DEBUG(logger_, "Image [" << image_number << "] found in store");
+              LOG4CXX_DEBUG_LEVEL(2, logger_, "Image [" << image_number << "] found in store");
               image_job_ptr = image_store_[image_number];
             } else {
               // We need to create a new image job for this packet
-              LOG4CXX_DEBUG(logger_, "First packet for image job [" << image_number << "] creating ImageJob object");
+              LOG4CXX_DEBUG_LEVEL(2, logger_, "First packet for image job [" << image_number << "] creating ImageJob object");
               // TODO: Check this is not an old packet
-              image_job_ptr = boost::shared_ptr<LATRDImageJob>(new LATRDImageJob(width_, height_, image_number));
+              image_job_ptr = boost::shared_ptr<LATRDImage>(new LATRDImage(width_, height_, image_number));
               // Store the image job in the store, index by timestamp
               image_store_[image_number] = image_job_ptr;
             }
 
+            image_job_ptr->set_packet_seen(packet_id);
             // Start from index 3 as we can ignore the header words and extended timestamp
             for (uint16_t index = 3; index < word_count; index++) {
               uint32_t x_pos = 0;
@@ -166,8 +162,7 @@ namespace FrameProcessor {
               try {
                 // Check if the word is a final packet word
                 if (check_for_final_packet_word(*data_word_ptr)) {
-                  LOG4CXX_DEBUG(logger_, "Image [" << image_job_ptr->get_frame_number() << "] End Of Image on packet ["
-                                                   << packet_id << "]");
+                  LOG4CXX_DEBUG_LEVEL(2, logger_, "Image [" << image_number << "] End Of Image on packet [" << packet_id << "]");
                   image_job_ptr->set_eoi(packet_id);
                 } else {
                   if (process_data_word(*data_word_ptr,
@@ -176,8 +171,13 @@ namespace FrameProcessor {
                                         &i_tot,
                                         &event_count)) {
                     // Add the event count to the 2D image
-                    image_job_ptr->add_pixel(packet_id, x_pos, y_pos, event_count);
+                    LOG4CXX_DEBUG_LEVEL(4, logger_, "incrementing pixel at " <<  x_pos-origin_x_ << " " <<  y_pos-origin_y_ << " by " << event_count);
+                    image_job_ptr->add_pixel(x_pos-origin_x_, y_pos-origin_y_, event_count);
                     total_count_ += event_count;
+                  }
+                  else
+                  {
+                    LOG4CXX_DEBUG_LEVEL(4, logger_, "found a non-integral data word");
                   }
                 }
               }
@@ -196,41 +196,31 @@ namespace FrameProcessor {
       payload_ptr += LATRD::primary_packet_size;
     }
     // After processing all of the packets, loop through the job map and see if we can pass out any frames
-    uint32_t image_counter = base_image_counter_ - 1;
-    std::vector<uint64_t> delete_image_vector;
-    std::map<uint64_t, boost::shared_ptr<LATRDImageJob> >::iterator iter;
+    std::vector<uint64_t> delete_image_ids;
+    std::map<uint64_t, boost::shared_ptr<LATRDImage> >::iterator iter;
     for (iter = image_store_.begin(); iter != image_store_.end(); ++iter){
-        image_counter++;
         if (iter->second->verify_image()){
           if (!iter->second->get_sent()) {
-            LOG4CXX_DEBUG(logger_,
-                          "Creating image frame " << iter->second->get_frame_number() << " from raw buffer " << frame->get_frame_number());
             boost::shared_ptr<Frame> out_frame = iter->second->to_frame();
+            LOG4CXX_DEBUG_LEVEL(2, logger_,
+                          "Pushing frame for image #" << iter->second->get_frame_number());
             image_frames.push_back(out_frame);
 
             iter->second->mark_sent();
           }
-          // Mark the frame for deletion
-          delete_image_vector.push_back(iter->first);
+          // Mark the frame for deletion; this can be done here but isn't.
+          delete_image_ids.push_back(iter->first);
         }
     }
     std::vector<uint64_t>::iterator del_iter;
-    for (del_iter = delete_image_vector.begin(); del_iter != delete_image_vector.end(); ++del_iter){
-        if (image_store_.begin()->first == *del_iter){
-            // Reset the job
-            image_store_[*del_iter]->reset();
-            // Delete the job
-            image_store_.erase(*del_iter);
-            // Increment the base
-            base_image_counter_++;
-        }
+    for (del_iter = delete_image_ids.begin(); del_iter != delete_image_ids.end(); ++del_iter){
+      image_store_.erase(*del_iter);
     }
-
 
     return image_frames;
   }
 
-  bool LATRDProcessIntegral::process_data_word(uint64_t data_word,
+  inline bool LATRDProcessIntegral::process_data_word(uint64_t data_word,
                                                uint32_t *chip_x,
                                                uint32_t *chip_y,
                                                uint32_t *i_tot,
@@ -276,4 +266,11 @@ namespace FrameProcessor {
     return false;
   }
 
+  void LATRDProcessIntegral::set_origin(int x, int y)
+  {
+    origin_x_ = x;
+    origin_y_ = y;
+    LOG4CXX_DEBUG_LEVEL(0, logger_,
+                          "Origin set to [" << origin_x_ << "," << origin_y_ << "]");
+  }
 }

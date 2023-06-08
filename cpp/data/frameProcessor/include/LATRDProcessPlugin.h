@@ -74,6 +74,8 @@ namespace FrameProcessor {
         static const std::string CONFIG_SENSOR;
         static const std::string CONFIG_SENSOR_WIDTH;
         static const std::string CONFIG_SENSOR_HEIGHT;
+        static const std::string CONFIG_SENSOR_ORIGIN_X;
+        static const std::string CONFIG_SENSOR_ORIGIN_Y;
 
         /** Configuration constant for setting raw mode */
         static const std::string CONFIG_RAW_MODE;
@@ -112,6 +114,9 @@ namespace FrameProcessor {
 
         size_t sensor_width_;
         size_t sensor_height_;
+
+        int sensor_origin_x_;
+        int sensor_origin_y_;
 
         std::string mode_;
         std::string acq_id_;

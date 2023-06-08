@@ -37,10 +37,14 @@ const std::string LATRDProcessPlugin::CONFIG_ACQ_ID               = "acq_id";
 const std::string LATRDProcessPlugin::CONFIG_SENSOR               = "sensor";
 const std::string LATRDProcessPlugin::CONFIG_SENSOR_WIDTH         = "width";
 const std::string LATRDProcessPlugin::CONFIG_SENSOR_HEIGHT        = "height";
+const std::string LATRDProcessPlugin::CONFIG_SENSOR_ORIGIN_X      = "origin_x";
+const std::string LATRDProcessPlugin::CONFIG_SENSOR_ORIGIN_Y      = "origin_y";
 
 LATRDProcessPlugin::LATRDProcessPlugin() :
   sensor_width_(256),
   sensor_height_(256),
+  sensor_origin_x_(0),
+  sensor_origin_y_(0),
   mode_(CONFIG_MODE_TIME_ENERGY),
 	concurrent_processes_(1),
 	concurrent_rank_(0),
@@ -55,7 +59,6 @@ LATRDProcessPlugin::LATRDProcessPlugin() :
     LOG4CXX_TRACE(logger_, "LATRDProcessPlugin constructor.");
 
     integral_.init(sensor_width_, sensor_height_);
-    integral_.reset_image();
 
     // Create the buffer managers
     rawBuffer_ = boost::shared_ptr<LATRDBuffer>(new LATRDBuffer(LATRD::frame_qty, "raw_data", UINT64_TYPE));
@@ -67,7 +70,7 @@ LATRDProcessPlugin::LATRDProcessPlugin() :
     // Init the idle packet timestamp to the current time
     gettime(&idle_timestamp_);
 
-  LOG4CXX_INFO(logger_, "LATRDProcessPlugin version " << this->get_version_long() << " loaded");
+  LOG4CXX_DEBUG(logger_, "LATRDProcessPlugin version " << this->get_version_long() << " loaded");
 }
 
 LATRDProcessPlugin::~LATRDProcessPlugin()
@@ -226,8 +229,18 @@ void LATRDProcessPlugin::configureSensor(OdinData::IpcMessage &config, OdinData:
     LOG4CXX_DEBUG_LEVEL(1, logger_, "Sensor height changed to " << this->sensor_height_);
   }
 
+  if (config.has_param(LATRDProcessPlugin::CONFIG_SENSOR_ORIGIN_X)) {
+    this->sensor_origin_x_ = config.get_param<size_t>(LATRDProcessPlugin::CONFIG_SENSOR_ORIGIN_X);
+    LOG4CXX_DEBUG_LEVEL(1, logger_, "Sensor origin x changed to " << this->sensor_origin_x_);
+  }
+
+  if (config.has_param(LATRDProcessPlugin::CONFIG_SENSOR_ORIGIN_Y)) {
+    this->sensor_origin_y_ = config.get_param<size_t>(LATRDProcessPlugin::CONFIG_SENSOR_ORIGIN_Y);
+    LOG4CXX_DEBUG_LEVEL(1, logger_, "Sensor origin x changed to " << this->sensor_origin_y_);
+  }
+
   integral_.init(this->sensor_width_, this->sensor_height_);
-  integral_.reset_image();
+  integral_.set_origin(sensor_origin_x_, sensor_origin_y_);
 }
 
 void LATRDProcessPlugin::configureFrameSize(OdinData::IpcMessage &config, OdinData::IpcMessage &reply)
@@ -310,6 +323,8 @@ void LATRDProcessPlugin::process_frame(boost::shared_ptr<Frame> frame)
       std::vector <boost::shared_ptr<Frame> > frames = integral_.process_frame(frame);
       std::vector <boost::shared_ptr<Frame> >::iterator iter;
       for (iter = frames.begin(); iter != frames.end(); ++iter) {
+        LOG4CXX_DEBUG_LEVEL(2, logger_, "Pushing dset " << (*iter)->get_meta_data().get_dataset_name() <<
+                                " frame number " << (*iter)->get_meta_data().get_frame_number() );
         this->push(*iter);
       }
     } else {
