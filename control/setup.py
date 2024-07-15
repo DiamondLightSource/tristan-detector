@@ -24,7 +24,7 @@ setup(
     long_description=long_description,
 
     # The project's main homepage.
-    url='https://github.com/dls-controls/LATRD',
+    url='https://github.com/DiamondLightSource/LATRD',
 
     # Author details
     author='Alan Greer',
