@@ -2,4 +2,7 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 
-/odin/bin/tristan_odin --config=$SCRIPT_DIR/odin_server.cfg --logging=error
+# Increase maximum fds available for ZeroMQ sockets
+ulimit -n 2048
+
+tristan_control --config=$SCRIPT_DIR/odin_server.cfg --logging=error --access_logging=ERROR

@@ -2,4 +2,4 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 
-/odin/bin/frameReceiver --sharedbuf=odin_buf_3 -m 70000000000 --iothreads 1 --ctrl=tcp://0.0.0.0:10020 --ready=tcp://127.0.0.1:10021 --release=tcp://127.0.0.1:10022 --json_file=$SCRIPT_DIR/fr3.json --logconfig $SCRIPT_DIR/log4cxx.xml
+/odin/bin/frameReceiver --io-threads 1 --ctrl=tcp://0.0.0.0:10020 --config=$SCRIPT_DIR/fr3.json --log-config $SCRIPT_DIR/log4cxx.xml
