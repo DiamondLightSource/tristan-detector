@@ -6,7 +6,6 @@ Created on 20 May 2016
 
 import argparse
 import logging
-import subprocess
 import threading
 import time
 
@@ -32,7 +31,7 @@ from .tristan_adapter import (
 )
 
 
-class LATRDControlSimulator(object):
+class LATRDControlSimulator:
     DETECTOR_1M = 1
     DETECTOR_2M = 2
     DETECTOR_10M = 10
@@ -194,7 +193,7 @@ class LATRDControlSimulator(object):
         msg = LATRDMessage.parse_json(self._ctrl_channel.recv())
 
         self._store["status"]["detector"]["udp_packets_sent"] = [
-            self._daq._sent_packets
+            self._daq._sent_packets  # noqa: SLF001
         ]
 
         # self._log.debug("Received message ID[%s]: %s", id, msg)
@@ -230,7 +229,8 @@ class LATRDControlSimulator(object):
 
     def parse_post_msg(self, msg, send_id):
         # Nothing to do here, just wait two seconds before replying
-        # Check for the "Run" command.  If it is sent and the simulated script has been supplied then execute it
+        # Check for the "Run" command.  If it is sent and the simulated
+        # script has been supplied then execute it
         if "command" in msg.params:
             if "arm" == msg.params["command"]:
                 self._store["status"]["state"] = "arming"
@@ -258,7 +258,7 @@ class LATRDControlSimulator(object):
     def execute_script(self):
         self._daq.run()
         time.sleep(2.0)
-        while self._daq.running() == True:
+        while self._daq.running():
             # print("self._daq_running() = {}".format(self._daq.running()))
             time.sleep(0.5)
         self._store["status"]["state"] = "idle"
@@ -316,7 +316,7 @@ def main():
             port = int(data[1])
             eps.append((ip, port))
 
-        print("Endpoints: {}".format(eps))
+        print(f"Endpoints: {eps}")
 
     sensor = 1
     if isinstance(args.sensor, str):

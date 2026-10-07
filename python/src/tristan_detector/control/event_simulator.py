@@ -1,14 +1,12 @@
 import argparse
 import logging
-import os
-import random
 import socket
 import struct
 import threading
 import time
 
 
-class TristanDefinitions(object):
+class TristanDefinitions:
     IDLE_PACKET_MASK = 0x000000000003F800
     PRODUCER_ID_MASK = 0x03FC000000000000
     TIME_SLICE_WRAP_MASK = 0x0003FFFFFFFC0000
@@ -26,14 +24,14 @@ class TristanDefinitions(object):
     NO_OF_BUFFERS = 4
 
 
-class TristanData(object):
+class TristanData:
     WORD_INDEX = 0
     TIMESTAMP = 0
     TIME_SLICE_NUMBER = 0
     PACKET_NUMBER = 0
 
 
-class TristanTimestampWord(object):
+class TristanTimestampWord:
     def __init__(self, ts):
         self._ts = ts
 
@@ -44,7 +42,7 @@ class TristanTimestampWord(object):
         return data_word
 
 
-class TristanWord(object):
+class TristanWord:
     def __init__(self, ts):
         self._index = TristanData.WORD_INDEX
         TristanData.WORD_INDEX += 1
@@ -57,7 +55,7 @@ class TristanWord(object):
         return data_word
 
 
-class TristanIdlePacket(object):
+class TristanIdlePacket:
     def __init__(self):
         self._words = [
             0x0000000000000003,
@@ -74,7 +72,7 @@ class TristanIdlePacket(object):
         return byte_array
 
 
-class TristanPacket(object):
+class TristanPacket:
     def __init__(self, words, time_slice):
         self._words = []
 
@@ -145,16 +143,12 @@ class Range(argparse.Action):
     def __init__(self, min=None, max=None, *args, **kwargs):
         self.min = min
         self.max = max
-        kwargs["metavar"] = "[%d-%d]" % (self.min, self.max)
-        super(Range, self).__init__(*args, **kwargs)
+        kwargs["metavar"] = f"[{self.min}-{self.max}]"
+        super().__init__(*args, **kwargs)
 
     def __call__(self, parser, namespace, value, option_string=None):
         if not self.min <= value <= self.max:
-            msg = "invalid choice: %r (choose from [%d-%d])" % (
-                value,
-                self.min,
-                self.max,
-            )
+            msg = f"invalid choice: {value!r} (choose from [{self.min}-{self.max}])"
             raise argparse.ArgumentError(self, msg)
         setattr(namespace, self.dest, value)
 
@@ -166,7 +160,7 @@ class CsvAction(argparse.Action):
 
     def __init__(self, val_type=None, *args, **kwargs):
         self.val_type = val_type
-        super(CsvAction, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def __call__(self, parser, namespace, value, option_string=None):
         item_list = []
@@ -174,11 +168,11 @@ class CsvAction(argparse.Action):
             for item_str in value.split(","):
                 item_list.append(self.val_type(item_str))
         except ValueError as e:
-            raise argparse.ArgumentError(self, e)
+            raise argparse.ArgumentError(self, e) from e
         setattr(namespace, self.dest, item_list)
 
 
-class TristanProducerDefaults(object):
+class TristanProducerDefaults:
     """
     Holds default values for frame producer parameters.
     """
@@ -202,14 +196,15 @@ class TristanProducerDefaults(object):
         self.drop_list = None
 
 
-class TristanEventProducer(object):
+class TristanEventProducer:
     """
     Tristan event procducer.
     """
 
     def __init__(self, endpoints=None):
         """
-        Initialise the packet producer object, setting defaults and parsing command-line options.
+        Initialise the packet producer object, setting defaults and
+        parsing command-line options.
         """
         # IDLE packet record
         self._idle_packet = None
@@ -263,9 +258,8 @@ class TristanEventProducer(object):
     def running(self):
         if self._sent_packets != self._last_log:
             logging.info(
-                "PACKETS SENT : {}    TO SEND : {}".format(
-                    self._sent_packets, self._packets_to_send
-                )
+                f"PACKETS SENT: {self._sent_packets}  "
+                f"TO SEND: {self._packets_to_send}"
             )
             self._last_log = self._sent_packets
         return self._sent_packets != self._packets_to_send
@@ -299,7 +293,7 @@ class TristanEventProducer(object):
                 # self._packets.append(pkt.to_packet())
                 # self._ts.append(self._pkt_number)
                 self._pkt_number += 1
-            logging.debug("Generated time slice {}".format(time_slice))
+            logging.debug(f"Generated time slice {time_slice}")
             self._time_slices.append(time_slice_dict)
             time_slice += 1
             TristanData.PACKET_NUMBER = 0
@@ -309,7 +303,7 @@ class TristanEventProducer(object):
 
         send_threads = []
         logging.info(
-            "Launching threads to send packets to endpoints: {}".format(self._endpoints)
+            f"Launching threads to send packets to endpoints: {self._endpoints}"
         )
 
         index = 0
@@ -339,14 +333,14 @@ class TristanEventProducer(object):
         idle_packets_sent = 0
         logging.info("Sending %d idle packets at 1 Hz", self.defaults.num_idle)
         # Start by sending Idle packets at a rate of 1Hz
-        for packets in range(int(self.defaults.num_idle)):
+        for _packets in range(int(self.defaults.num_idle)):
             # Send the packet over the UDP socket
             try:
                 idle_bytes_sent += udp_socket.sendto(self._idle_packet, (addr, port))
                 idle_packets_sent += 1
                 # Add 1 second delay
                 time.sleep(1.0)
-            except socket.error as exc:
+            except OSError as exc:
                 logging.error("Got error sending frame packet: %s", exc)
                 break
 
@@ -377,7 +371,7 @@ class TristanEventProducer(object):
                 )
                 for packet in ts["packets"]:
                     try:
-                        # logging.info("Checking port number for %d at index %d", ts_id, index)
+                        # logging.info("Checking port/idx %d/%d", ts_id, index)
                         # logging.info("Sending UDP packet")
                         data_bytes_sent += udp_socket.sendto(packet, (addr, port))
                         # logging.info("Sent UDP packet")
@@ -388,7 +382,7 @@ class TristanEventProducer(object):
                         time.sleep(delay)
                         if data_packets_sent % 1000 == 0:
                             logging.info("Sent %d packets", data_packets_sent)
-                    except socket.error as exc:
+                    except OSError as exc:
                         logging.error("Got error sending frame packet: %s", exc)
                         break
 
@@ -397,14 +391,14 @@ class TristanEventProducer(object):
         idle_packets_sent = 0
         logging.info("Sending %d idle packets at 1 Hz", self.defaults.num_idle)
         # End by sending Idle packets at a rate of 1Hz
-        for packets in range(int(self.defaults.num_idle)):
+        for _packets in range(int(self.defaults.num_idle)):
             # Send the packet over the UDP socket
             try:
                 idle_bytes_sent += udp_socket.sendto(self._idle_packet, (addr, port))
                 idle_packets_sent += 1
                 # Add 1 second delay
                 time.sleep(1.0)
-            except socket.error as exc:
+            except OSError as exc:
                 logging.error("Got error sending frame packet: %s", exc)
                 break
 

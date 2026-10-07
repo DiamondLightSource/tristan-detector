@@ -20,7 +20,6 @@ from odin.adapters.adapter import (
     response_types,
 )
 from tornado import escape
-from tornado.ioloop import IOLoop
 
 from .latrd_channel import LATRDChannel
 from .latrd_message import GetMessage, LATRDMessage, PostMessage, PutMessage
@@ -118,7 +117,7 @@ class ParameterType(Enum):
     ENUM = 6
 
 
-class Parameter(object):
+class Parameter:
     def __init__(
         self,
         name,
@@ -160,7 +159,7 @@ class EnumParameter(Parameter):
     def __init__(
         self, name, value=None, allowed_values=None, callback=None, every_time=False
     ):
-        super(EnumParameter, self).__init__(
+        super().__init__(
             name,
             data_type=ParameterType.ENUM,
             value=value,
@@ -171,7 +170,7 @@ class EnumParameter(Parameter):
 
     def get(self):
         # Create the dictionary of information
-        return_value = super(EnumParameter, self).get()
+        return_value = super().get()
         if self._allowed_values is not None:
             return_value["allowed_values"] = self._allowed_values
         return return_value
@@ -181,10 +180,10 @@ class EnumParameter(Parameter):
         # Call super set with the name of the enum type
         if isinstance(value, EnumParameter):
             logging.debug("value considered an enum")
-            super(EnumParameter, self).set_value(value.name, callback)
+            super().set_value(value.name, callback)
         else:
             logging.debug("value is a string")
-            super(EnumParameter, self).set_value(value, callback)
+            super().set_value(value, callback)
 
     @property
     def index(self):
@@ -193,7 +192,7 @@ class EnumParameter(Parameter):
 
 class IntegerParameter(Parameter):
     def __init__(self, name, value=None, limits=None, callback=None, every_time=False):
-        super(IntegerParameter, self).__init__(
+        super().__init__(
             name,
             data_type=ParameterType.INT,
             value=value,
@@ -204,7 +203,7 @@ class IntegerParameter(Parameter):
 
     def get(self):
         # Create the dictionary of information
-        return_value = super(IntegerParameter, self).get()
+        return_value = super().get()
         if self._limits is not None:
             return_value["limits"] = self._limits
         return return_value
@@ -212,7 +211,7 @@ class IntegerParameter(Parameter):
 
 class DoubleParameter(Parameter):
     def __init__(self, name, value=None, limits=None, callback=None, every_time=False):
-        super(DoubleParameter, self).__init__(
+        super().__init__(
             name,
             data_type=ParameterType.DOUBLE,
             value=value,
@@ -223,7 +222,7 @@ class DoubleParameter(Parameter):
 
     def get(self):
         # Create the dictionary of information
-        return_value = super(DoubleParameter, self).get()
+        return_value = super().get()
         if self._limits is not None:
             return_value["limits"] = self._limits
         return return_value
@@ -231,7 +230,7 @@ class DoubleParameter(Parameter):
 
 class StringParameter(Parameter):
     def __init__(self, name, value=None, callback=None, every_time=False):
-        super(StringParameter, self).__init__(
+        super().__init__(
             name,
             data_type=ParameterType.STRING,
             value=value,
@@ -242,10 +241,11 @@ class StringParameter(Parameter):
 
 class TristanControlAdapter(ApiAdapter):
     """
-    TristanControlAdapter class
+    TristanControlAdapter class.
 
-    This class provides the adapter interface between the ODIN server and the Tristan detector system,
-    transforming the REST-like API HTTP verbs into the appropriate Tristan ZeroMQ control messages
+    This class provides the adapter interface between the ODIN server and the Tristan
+detector system, transforming the REST-like API HTTP verbs into the appropriate Tristan
+ZeroMQ control messages
     """
 
     TEMP_ASICS_COUNT = 16
@@ -329,7 +329,7 @@ class TristanControlAdapter(ApiAdapter):
 
         :param kwargs:
         """
-        super(TristanControlAdapter, self).__init__(**kwargs)
+        super().__init__(**kwargs)
 
         # Status dictionary read from client
         self._param = {
@@ -444,22 +444,26 @@ class TristanControlAdapter(ApiAdapter):
         try:
             self._endpoint = self.options.get("endpoint")
             self._kwargs["endpoint"] = self._endpoint
-        except:
-            raise RuntimeError("No endpoint specified for the Tristan detector")
+        except Exception:
+            raise RuntimeError(
+                "No endpoint specified for the Tristan detector"
+            ) from None
 
         # Read the expected version of the firmware
         try:
             self._firmware = self.options.get("firmware")
             self._kwargs["firmware"] = self._firmware
-        except:
-            raise RuntimeError("No firmware version specified for the Tristan detector")
+        except Exception:
+            raise RuntimeError(
+                "No firmware version specified for the Tristan detector"
+            ) from None
 
         # Read the location of the UDP configuration file
         try:
             self._udp_config_file = self.options.get("udp_file")
             if self._udp_config_file is None:
                 self._udp_config_file = "./udp_tristan.json"
-        except:
+        except Exception:
             # Use a default if no location if an error occurs
             self._udp_config_file = "./udp_tristan.json"
         self._kwargs["udp_file"] = self._udp_config_file
@@ -528,7 +532,7 @@ class TristanControlAdapter(ApiAdapter):
                         for item in request_items[1:]:
                             item_dict = item_dict[item]
                         response_item = item_dict.get()
-                    except:
+                    except Exception:
                         response_item = None
 
                     logging.debug(response_item)
@@ -538,13 +542,13 @@ class TristanControlAdapter(ApiAdapter):
                         item_dict = self._parameters
                         for item in request_items:
                             item_dict = item_dict[item]
-                    except:
+                    except Exception:
                         item_dict = None
                     response_item = item_dict
 
                     logging.debug(response_item)
                     response["value"] = response_item
-            except:
+            except Exception:
                 logging.debug(TristanControlAdapter.ERROR_FAILED_GET)
                 status_code = 503
                 response["error"] = TristanControlAdapter.ERROR_FAILED_GET
@@ -594,7 +598,7 @@ class TristanControlAdapter(ApiAdapter):
                 if self._parameters["status"]["state"] != "armed":
                     self.set_error("Time out waiting for detector armed state")
                     status_code = 408
-                    response["reply"] = str("Time out waiting for detector armed state")
+                    response["reply"] = "Time out waiting for detector armed state"
                 else:
                     logging.info("Confirmed armed response")
                     # Detector armed OK, now tell it to run
@@ -617,14 +621,15 @@ class TristanControlAdapter(ApiAdapter):
                     if self._parameters["status"]["state"] != "running":
                         self.set_error("Time out waiting for detector running state")
                         status_code = 408
-                        response["reply"] = str(
+                        response["reply"] = (
                             "Time out waiting for detector running state"
                         )
 
                     else:
                         logging.info("Confirmed running response")
                         with self._comms_lock:
-                            # Once the reply has been received set the acquisition status to active
+                            # Once the reply has been received, set the acquisition
+                            # status to active
                             self._parameters["status"]["acquisition_complete"] = False
                             logging.info(
                                 "Acquisition confirmed, setting state to active"
@@ -645,7 +650,8 @@ class TristanControlAdapter(ApiAdapter):
                 response["reply"] = str(reply)
 
         if "engineering" in config_items[0]:
-            # This is a special command that allows an arbitrary JSON object to be sent to the hardware
+            # This special command allows an arbitrary JSON object to be
+            # sent to the hardware
             # The JSON object must be encoded into the body of the PUT request
             logging.debug(
                 "PUT request.body: %s", str(escape.url_unescape(request.body))
@@ -686,7 +692,7 @@ class TristanControlAdapter(ApiAdapter):
         :param request: Tornado HTTP request object
         :return: ApiAdapterResponse object to be returned to the client
         """
-        response = {"response": "{}: DELETE on path {}".format(self.name, path)}
+        response = {"response": f"{self.name}: DELETE on path {path}"}
         status_code = 501
 
         logging.debug(response)
@@ -704,16 +710,17 @@ class TristanControlAdapter(ApiAdapter):
             parameters = request_list[-1]
             try:
                 parameters = TristanControlAdapter.CONFIG_ITEM_LIST[request_list[-2]](
-                    float((request_list[-1]))
+                    float(request_list[-1])
                 )
-            except:
+            except Exception:
                 parameters = request_list[-1]
             request_list = request_list[:-1]
         else:
             try:
                 parameters = json.loads(str(escape.url_unescape(request.body)))
             except ValueError:
-                # If the body could not be parsed into an object it may be a simple string
+                # If the body could not be parsed into an object,
+                # it may be a simple string
                 parameters = str(escape.url_unescape(request.body))
 
         # Check to see if the request contains more than one item
@@ -724,7 +731,7 @@ class TristanControlAdapter(ApiAdapter):
             param_dict = {}
             command = None
             if len(request_list) > 1:
-                # We need to create a dictionary structure that contains the request list
+                # Create a dictionary structure containing the request list
                 current_dict = param_dict
                 for item in request_list[1:-1]:
                     current_dict[item] = {}
@@ -751,25 +758,25 @@ class TristanControlAdapter(ApiAdapter):
         """
         # Load the spcified file into a JSON object
         logging.info(
-            "Loading UDP configuration from file {}".format(self._udp_config_file)
+            f"Loading UDP configuration from file {self._udp_config_file}"
         )
         try:
             with open(self._udp_config_file) as config_file:
                 udp_config = json.load(config_file)
-        except IOError as io_error:
-            logging.error("Failed to open UDP configuration file: {}".format(io_error))
-            self.set_error("Failed to open UDP configuration file: {}".format(io_error))
+        except OSError as io_error:
+            logging.error(f"Failed to open UDP configuration file: {io_error}")
+            self.set_error(f"Failed to open UDP configuration file: {io_error}")
             return
         except ValueError as value_error:
-            logging.error("Failed to parse UDP json config: {}".format(value_error))
-            self.set_error("Failed to parse UDP json config: {}".format(value_error))
+            logging.error(f"Failed to parse UDP json config: {value_error}")
+            self.set_error(f"Failed to parse UDP json config: {value_error}")
             return
 
-        logging.info("Downloading UDP configuration: {}".format(udp_config))
+        logging.info(f"Downloading UDP configuration: {udp_config}")
         msg = PutMessage()
         msg.set_param("config", udp_config)
         reply = self.send_recv(msg)
-        logging.info("Reply from message: {}".format(reply))
+        logging.info(f"Reply from message: {reply}")
 
     def send_recv(self, msg):
         """
@@ -788,7 +795,7 @@ class TristanControlAdapter(ApiAdapter):
                 if pollevts == LATRDChannel.POLLIN:
                     reply = LATRDMessage.parse_json(self._detector.recv())
 
-                # Continue to attempt to get the correct reply until we timeout (or get the correct reply)
+                # Continue attempting to get the correct reply until timeout
                 while reply and reply.msg_id != msg.msg_id:
                     reply = None
                     pollevts = self._detector.poll(
@@ -810,7 +817,7 @@ class TristanControlAdapter(ApiAdapter):
             time.sleep(0.1)
             if (datetime.now() - self._update_time).seconds > self._update_interval:
                 self._update_time = datetime.now()
-                trigger_udp_config = False
+                pass  # trigger_udp_config was a TODO item, removed
                 try:
                     with self._comms_lock:
                         logging.debug("Updating status from detector...")
@@ -847,7 +854,8 @@ class TristanControlAdapter(ApiAdapter):
                                         self._parameters["status"]["detector"][
                                             "bytes"
                                         ] = x_pixels * y_pixels * 2
-                                    # Sum the packets sent from the detector (by module) into a singe total
+                                    # Sum the packets sent from the detector (by module)
+                    # into a single total
                                     if (
                                         "udp_packets_sent"
                                         in self._parameters["status"]["detector"]
@@ -859,9 +867,9 @@ class TristanControlAdapter(ApiAdapter):
                                             self._parameters["status"]["detector"][
                                                 "udp_packets_sent"
                                             ] = sum(pckts)
-                                # Check if we have just reconnected
+                                # Check if we just reconnected
                                 if not currently_connected:
-                                    # Reconnection event so send down the time stamp config item
+                                    # Send timestamp config on reconnection
                                     connect_time = datetime.now(tzlocal()).strftime(
                                         "%Y-%m-%dT%H:%M%z"
                                     )
@@ -909,7 +917,7 @@ class TristanControlAdapter(ApiAdapter):
                                             ][0]
                                 except Exception as ex:
                                     logging.error(
-                                        "Error reading clock status items [dpll_lol, dpll_hold]"
+                                        "Error reading clock status items", ex
                                     )
                                     logging.error("Exception: %s", ex)
 
@@ -918,48 +926,48 @@ class TristanControlAdapter(ApiAdapter):
                                         "temp_asics"
                                         in self._parameters["status"]["sensor"]
                                     ):
-                                        # temp_asics is supplied as a 2D array, we need to split that out for monitoring
+                                        # temp_asics is 2D; split for monitoring
                                         for index in range(self.TEMP_ASICS_COUNT):
                                             self._parameters["status"]["sensor"][
-                                                "temp_asics_{}".format(index)
+                                                f"temp_asics_{index}"
                                             ] = []
                                             for temp in self._parameters["status"][
                                                 "sensor"
                                             ]["temp_asics"]:
                                                 self._parameters["status"]["sensor"][
-                                                    "temp_asics_{}".format(index)
+                                                    f"temp_asics_{index}"
                                                 ].append(temp[index])
 
                                     if (
                                         "temp_pcb"
                                         in self._parameters["status"]["sensor"]
                                     ):
-                                        # temp_pcb is supplied as a 2D array, we need to split that out for monitoring
+                                        # temp_pcb is 2D; split for monitoring
                                         for index in range(self.TEMP_PCB_COUNT):
                                             self._parameters["status"]["sensor"][
-                                                "temp_pcb_{}".format(index)
+                                                f"temp_pcb_{index}"
                                             ] = []
                                             for temp in self._parameters["status"][
                                                 "sensor"
                                             ]["temp_pcb"]:
                                                 self._parameters["status"]["sensor"][
-                                                    "temp_pcb_{}".format(index)
+                                                    f"temp_pcb_{index}"
                                                 ].append(temp[index])
 
                                     if (
                                         "humidity"
                                         in self._parameters["status"]["sensor"]
                                     ):
-                                        # humidity is supplied as a 2D array, we need to split that out for monitoring
+                                        # humidity is 2D; split for monitoring
                                         for index in range(self.HUMIDITY_COUNT):
                                             self._parameters["status"]["sensor"][
-                                                "humidity_{}".format(index)
+                                                f"humidity_{index}"
                                             ] = []
                                             for temp in self._parameters["status"][
                                                 "sensor"
                                             ]["humidity"]:
                                                 self._parameters["status"]["sensor"][
-                                                    "humidity_{}".format(index)
+                                                    f"humidity_{index}"
                                                 ].append(temp[index])
 
                                 # Set the acquisition state item
@@ -1015,7 +1023,7 @@ class TristanControlAdapter(ApiAdapter):
                         params[item].set_value(data[item])
                 except Exception as ex:
                     logging.error(
-                        "Couldn't set param {} to {}".format(item, data[item])
+                        f"Couldn't set param {item} to {data[item]}"
                     )
                     logging.error("Exception thrown: %s", ex)
 

@@ -7,7 +7,7 @@ from zmq.utils.strtypes import cast_bytes
 from .latrd_message import LATRDMessage
 
 
-class LATRDChannelException(Exception):
+class LATRDChannelException(Exception):  # noqa: N818
     def __init__(self, msg, errno=None):
         self.msg = msg
         self.errno = errno
@@ -16,7 +16,7 @@ class LATRDChannelException(Exception):
         return str(self.msg)
 
 
-class LATRDChannel(object):
+class LATRDChannel:
     CHANNEL_HWM = 2
     CHANNEL_TYPE_PAIR = zmq.PAIR
     CHANNEL_TYPE_REQ = zmq.REQ
@@ -42,8 +42,9 @@ class LATRDChannel(object):
         # UUID4 value if not specified
         if self.channel_type == self.CHANNEL_TYPE_DEALER:
             if identity is None:
-                identity = "{:04x}-{:04x}".format(
-                    random.randrange(0x10000), random.randrange(0x10000)
+                identity = (
+                    f"{random.randrange(0x10000):04x}-"
+                    f"{random.randrange(0x10000):04x}"
                 )
             self.identity = identity
             self.socket.setsockopt(zmq.IDENTITY, cast_bytes(identity))  # pylint: disable=no-member
@@ -73,7 +74,7 @@ class LATRDChannel(object):
         try:
             self.socket.send(data, flags=zmq.NOBLOCK)
         except ZMQError:
-            # We will get a ZMQError if the detector is not available because we are in NOBLOCK mode
+            # We get a ZMQError if the detector is not available in NOBLOCK mode
             status = -1
         return status
 

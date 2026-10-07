@@ -3,14 +3,6 @@ import logging
 
 import zmq
 
-from .latrd_message import (
-    GetMessage,
-    LATRDMessage,
-    PostMessage,
-    PutMessage,
-    ResponseMessage,
-)
-
 
 class LATRDReactorTimer:
     last_timer_id = 0
@@ -92,8 +84,8 @@ class LATRDReactor:
             if self._needs_rebuild:
                 self.rebuild_pollitems()
 
-            # If there are no channels to poll and no timers currently active, break out of the
-            # reactor loop cleanly
+            # If there are no channels to poll and no timers active,
+            # break out of the reactor loop cleanly
             if self._pollsize == 0:
                 rc = 0
                 break
@@ -106,8 +98,8 @@ class LATRDReactor:
                 for sock in pollrc:
                     if pollrc[sock] == zmq.POLLIN:
                         try:
-                            #                            reply = self._channels[sock].recv()
-                            #                            msg = LATRDMessage.parse_json(reply)
+                            # reply = self._channels[sock].recv()
+                            # msg = LATRDMessage.parse_json(reply)
                             self._callbacks[sock]()
                         except Exception as e:
                             # TODO: How to handle an exception here
