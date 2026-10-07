@@ -1,37 +1,37 @@
 import random
+
 import zmq
 from zmq import ZMQError
 from zmq.utils.strtypes import cast_bytes
 
 from .latrd_message import LATRDMessage
 
+
 class LATRDChannelException(Exception):
-    
     def __init__(self, msg, errno=None):
         self.msg = msg
         self.errno = errno
-        
+
     def __str__(self):
         return str(self.msg)
-    
+
 
 class LATRDChannel(object):
-
     CHANNEL_HWM = 2
     CHANNEL_TYPE_PAIR = zmq.PAIR
-    CHANNEL_TYPE_REQ  = zmq.REQ
-    CHANNEL_TYPE_SUB  = zmq.SUB
-    CHANNEL_TYPE_PUB  = zmq.PUB
+    CHANNEL_TYPE_REQ = zmq.REQ
+    CHANNEL_TYPE_SUB = zmq.SUB
+    CHANNEL_TYPE_PUB = zmq.PUB
     CHANNEL_TYPE_DEALER = zmq.DEALER
     CHANNEL_TYPE_ROUTER = zmq.ROUTER
 
     POLLIN = zmq.POLLIN
-    
+
     def __init__(self, channel_type, endpoint=None, context=None, identity=None):
         self.channel_type = channel_type
         self.context = context or zmq.Context().instance()
-        self.socket  = self.context.socket(channel_type)
-        
+        self.socket = self.context.socket(channel_type)
+
         if endpoint:
             self.endpoint = endpoint
 
@@ -49,21 +49,21 @@ class LATRDChannel(object):
             self.socket.setsockopt(zmq.IDENTITY, cast_bytes(identity))  # pylint: disable=no-member
 
     def bind(self, endpoint=None):
-        
+
         if endpoint:
             self.endpoint = endpoint
-            
+
         self.socket.bind(self.endpoint)
-        
+
     def connect(self, endpoint=None):
-        
+
         if endpoint:
             self.endpoint = endpoint
-            
+
         self.socket.connect(self.endpoint)
-    
+
     def close(self):
-        
+
         self.socket.close()
 
     def send(self, data):
@@ -71,7 +71,7 @@ class LATRDChannel(object):
         if isinstance(data, LATRDMessage):
             data = data.encode()
         try:
-            self.socket.send(data, flags = zmq.NOBLOCK)
+            self.socket.send(data, flags=zmq.NOBLOCK)
         except ZMQError:
             # We will get a ZMQError if the detector is not available because we are in NOBLOCK mode
             status = -1
@@ -86,15 +86,15 @@ class LATRDChannel(object):
         self.socket.send_multipart(send_list)
 
     def recv(self):
-        
+
         data = self.socket.recv()
         return data
-    
+
     def poll(self, timeout=None):
-        
+
         pollevts = self.socket.poll(timeout)
         return pollevts
-    
-    def subscribe(self, topic=b''):
-        
+
+    def subscribe(self, topic=b""):
+
         self.socket.setsockopt(LATRDChannel.CHANNEL_TYPE_SUB, topic)

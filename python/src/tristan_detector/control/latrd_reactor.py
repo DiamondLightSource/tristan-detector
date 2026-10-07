@@ -1,13 +1,18 @@
-import zmq
 import datetime
-
 import logging
 
-from .latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
+import zmq
+
+from .latrd_message import (
+    GetMessage,
+    LATRDMessage,
+    PostMessage,
+    PutMessage,
+    ResponseMessage,
+)
 
 
 class LATRDReactorTimer:
-
     last_timer_id = 0
 
     def __init__(self, delay_ms, times, callback):
@@ -44,14 +49,13 @@ class LATRDReactorTimer:
     def clock_mono_ms():
         time = datetime.datetime.now()
         time_ms = int(time.strftime("%s")) * 1000.0 + int(time.microsecond / 1000.0)
-        #log.debug("%12d", time_ms)
+        # log.debug("%12d", time_ms)
         return time_ms
 
 
 class LATRDReactor:
-
     def __init__(self):
-        logging.basicConfig(format='%(asctime)-15s %(message)s')
+        logging.basicConfig(format="%(asctime)-15s %(message)s")
         self._log = logging.getLogger(".".join([__name__, self.__class__.__name__]))
         self._log.setLevel(logging.DEBUG)
         self._terminate_reactor = False
@@ -81,8 +85,7 @@ class LATRDReactor:
         return timer.get_id()
 
     def run(self):
-        rc = 0;
-
+        rc = 0
         # Loop until the terminate flag is set
         while not self._terminate_reactor:
             # If the poll items list needs rebuilding, do it now
@@ -103,12 +106,14 @@ class LATRDReactor:
                 for sock in pollrc:
                     if pollrc[sock] == zmq.POLLIN:
                         try:
-#                            reply = self._channels[sock].recv()
-#                            msg = LATRDMessage.parse_json(reply)
+                            #                            reply = self._channels[sock].recv()
+                            #                            msg = LATRDMessage.parse_json(reply)
                             self._callbacks[sock]()
                         except Exception as e:
                             # TODO: How to handle an exception here
-                            self._log.debug("Caught exception in reactor-callback function")
+                            self._log.debug(
+                                "Caught exception in reactor-callback function"
+                            )
                             self._log.exception(e)
 
                 for timer in self._timers:

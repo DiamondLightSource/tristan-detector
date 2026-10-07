@@ -25,7 +25,7 @@ def generate_fp_json(out_dir, total, number):
       "load": {
         "index": "hdf",
         "name": "FileWriterPlugin",
-        "library": "/home/gnx91527/work/tristan/odin-data/prefix/lib/libHdf5Plugin.so"
+        "library": "/odin/lib/libHdf5Plugin.so"
       }
     }
   },
@@ -34,7 +34,7 @@ def generate_fp_json(out_dir, total, number):
       "load": {
         "index": "latrd",
         "name": "LATRDProcessPlugin",
-        "library": "/dls_sw/work/tools/RHEL6-x86_64/LATRD/prefix/lib/libLATRDProcessPlugin.so"
+        "library": "/odin/lib/libLATRDProcessPlugin.so"
       }
     }
   },
@@ -156,8 +156,8 @@ def generate_fp_script(out_dir, total, number):
   fp_json=os.path.join(out_dir, 'fp{}.json'.format(number+1))
   script_string = '#!/bin/bash\n\
 \n\
-/home/gnx91527/work/tristan/odin-data/prefix/bin/frameProcessor --ctrl=tcp://0.0.0.0:{} --json_file={} \
---logconfig=/dls_sw/work/tools/RHEL6-x86_64/LATRD/lab29/log4cxx.xml "$@"\n\n'.format(ctrl_connection, fp_json)
+${FRAMEPROCESSOR_BIN:-/odin/bin/frameProcessor} --ctrl=tcp://0.0.0.0:{} --json_file={} \
+--logconfig=${LOG4CXX_CONFIG:-$SCRIPT_DIR/log4cxx.xml} "$@"\n\n'.format(ctrl_connection, fp_json)
 
   with open(os.path.join(out_dir, 'tristan_processor_{}'.format(number+1)), 'w') as outfile:
     outfile.write(script_string)
@@ -175,11 +175,11 @@ def generate_fr_script(out_dir, total, number):
 \n\
 BUFFER_NAME="FrameReceiverBuffer1"\n\
 BUFFER_STRING="$USER$BUFFER_NAME"\n\
-/dls_sw/prod/tools/RHEL6-x86_64/odin-data/0-6-0/prefix/bin/frameReceiver \
---path /dls_sw/work/tools/RHEL6-x86_64/LATRD/prefix/lib --ctrl=tcp://*:{} \
+${FRAMERECEIVER_BIN:-/odin/bin/frameReceiver} \
+--path ${ODIN_PLUGINS:-/odin/lib} --ctrl=tcp://*:{} \
 --port={} --ready=tcp://*:{} --release=tcp://*:{} \
 -t LATRD --rxbuffer=300000000 --sharedbuf=$BUFFER_STRING -m {} \
---logconfig=/dls_sw/work/tools/RHEL6-x86_64/LATRD/lab29/log4cxx.xml "$@"\n\n'.format(ctrl_connection,
+--logconfig=${LOG4CXX_CONFIG:-$SCRIPT_DIR/log4cxx.xml} "$@"\n\n'.format(ctrl_connection,
                                                                                      port_number,
                                                                                      ready_connection,
                                                                                      release_connection,
@@ -203,7 +203,7 @@ def generate_odin_scripts(out_dir, total):
 debug_mode = 1\n\
 http_port  = 8888\n\
 http_addr  = 0.0.0.0\n\
-static_path = /dls_sw/work/tools/RHEL6-x86_64/LATRD/control/latrd/odin/static\n\
+static_path = ${STATIC_PATH:-/odin/html/static}\n\
 adapters   = ctrl,fr,fp\n\
 \n\
 [tornado]\n\
@@ -232,9 +232,9 @@ update_interval = 0.5\n\n'.format(fr_endpoint, fp_endpoint)
 
   config_path = os.path.join(out_dir, 'tristan_odin.cfg')
 
-  script_string='export PYTHONPATH=/dls_sw/work/tools/RHEL6-x86_64/LATRD/prefix/lib/python2.7/site-packages/latrd-0.1.0-py2.7.egg:\
-/dls_sw/work/tools/RHEL6-x86_64/odin-data/prefix/lib/python2.7/site-packages/odin_data-0_5_0dls1_147.g10c558a.dirty-py2.7.egg\n\
-/dls_sw/work/tools/RHEL6-x86_64/LATRD/prefix/bin/latrd_odin --config={}\n\n'.format(config_path)
+  script_string='export PYTHONPATH=${ODIN_PLUGINS:-/odin/lib}/python2.7/site-packages/latrd-0.1.0-py2.7.egg:\
+${ODIN_PYTHONPATH:-/odin/lib/python/site-packages}\n\
+${ODIN_BIN:-/odin/bin/latrd_odin} --config={}\n\n'.format(config_path)
   with open(os.path.join(out_dir, 'odin_control_server_{}'.format(total)), 'w') as outfile:
     outfile.write(script_string)
 

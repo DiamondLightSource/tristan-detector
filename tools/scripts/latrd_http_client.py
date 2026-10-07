@@ -86,7 +86,7 @@ def main():
         })
         client.set_fp('plugin', {
             "load": {
-                "library": "/dls_sw/work/tools/RHEL6-x86_64/LATRD/prefix/lib/libLATRDProcessPlugin.so",
+                "library": "/odin/lib/libLATRDProcessPlugin.so",
                 "index": "latrd",
                 "name": "LATRDProcessPlugin"
             }
@@ -101,7 +101,7 @@ def main():
         client.set_fp("plugin", config)
         config = {
             "load": {
-                "library": "/dls_sw/prod/tools/RHEL6-x86_64/odin-data/0-4-0dls2/prefix/lib/libHdf5Plugin.so",
+                "library": "/odin/lib/libHdf5Plugin.so",
                 "index": "hdf",
                 "name": "FileWriterPlugin"
             }

@@ -2,6 +2,6 @@
 
 SCRIPT_DIR="$( cd "$( dirname "$0" )" && pwd )"
 
-export HDF5_PLUGIN_PATH=/dls_sw/prod/tools/RHEL7-x86_64/hdf5filters/0-6-2/prefix/hdf5_1.10/h5plugin
+export HDF5_PLUGIN_PATH=/odin/h5plugin
 
-/dls_sw/prod/tools/RHEL7-x86_64/odin-data/1-4-0dls3/prefix/bin/frameProcessor --ctrl=tcp://0.0.0.0:10004 --ready=tcp://127.0.0.1:10001 --release=tcp://127.0.0.1:10002 --json_file=$SCRIPT_DIR/fp1.json --logconfig $SCRIPT_DIR/log4cxx.xml
+/odin/bin/frameProcessor --ctrl=tcp://0.0.0.0:10004 --config=$SCRIPT_DIR/fp1.json --log-config $SCRIPT_DIR/log4cxx.xml

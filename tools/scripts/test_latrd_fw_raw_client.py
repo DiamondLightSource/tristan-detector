@@ -60,7 +60,7 @@ def main():
         client.send_configuration(config, "plugin")
         config = {
             "load": {
-                "library": "/dls_sw/prod/tools/RHEL6-x86_64/odin-data/0-4-0dls2/prefix/lib/libHdf5Plugin.so",
+                "library": "/odin/lib/libHdf5Plugin.so",
                 "index": "hdf",
                 "name": "FileWriterPlugin"
             }

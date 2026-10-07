@@ -10,7 +10,7 @@ def options():
     parser.add_argument("-s", "--samples", type=int, default=1000000, help="Number of sample events to process")
     parser.add_argument("-f", "--files", type=int, default=2, help="Number of SWMR files to create")
     parser.add_argument("-b", "--blocksize", type=int, default=50000, help="Number of sample events in each VDS file")
-    parser.add_argument("-d", "--datadir", default="/dls/detectors/Timepix3/I16_20160422/raw_data/W2J2_top/1hour", help="Path to raw data ASCII files")
+    parser.add_argument("-d", "--datadir", default="./data", help="Path to raw data ASCII files")
     parser.add_argument("-o", "--outdir", default="./data/", help="Path to processed output files")
     args = parser.parse_args()
     return args

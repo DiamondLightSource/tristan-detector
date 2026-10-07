@@ -19,7 +19,7 @@ import argparse;
 import os;
 import re;
 
-#sys.path.append("/dls/science/users/ulw43618/Projects2/gitlab/tristan-detector/control/")
+#sys.path.append("control/")
 
 log_levels = {
     'error': logging.ERROR,

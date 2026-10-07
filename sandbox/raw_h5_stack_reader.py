@@ -45,7 +45,7 @@ class RawH5StackReader(object):
 
 def main():
 
-    rs = RawH5StackReader('/dls/i19-2/data/2018/cm19670-3/timepix/19_PdNO2_-210_286K_timepix_TR_7_ON3_OFF4_repeat10')
+    rs = RawH5StackReader('./data')
     while True:
         print("{}".format(rs.read_lines(20)))
 

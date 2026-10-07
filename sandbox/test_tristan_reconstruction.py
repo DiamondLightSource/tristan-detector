@@ -1,6 +1,6 @@
 import argparse
 import sys
-#sys.path.append('/dls_sw/work/R3.14.12.3/support/mapping/tools/h5py/prefix/lib/python2.7/site-packages/h5py-2.5.0-py2.7-linux-x86_64.egg')
+#sys.path.append('/venv/lib/python*/site-packages')
 import os, time, re
 from optparse import OptionParser
 from subprocess import Popen, PIPE

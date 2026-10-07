@@ -1,6 +1,50 @@
 [build-system]
-# To get a reproducible wheel, wheel must be pinned to the same version as in
-# dls-python3, and setuptools must produce the same dist-info. Cap setuptools
-# to the last version that didn't add License-File to METADATA
-requires = ["setuptools<57", "wheel==0.38.1", "versioneer-518"]
+requires = ["setuptools>=64", "setuptools_scm[toml]>=8"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "tristan-detector"
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dynamic = ["version"]
+description = "Tristan detector for odin control"
+license.file = "LICENSE"
+readme = "README.md"
+authors = [
+    { name = "Alan Greer", email = "alan.greer@diamond.ac.uk" },
+    { name = "Ollie Copping", email = "oliver.copping@diamond.ac.uk" },
+]
+dependencies = ["odin_control~=2.1.0", "tornado>=4.3"]
+requires-python = ">=3.8"
+
+[tool.setuptools_scm]
+version_file = "src/_version.py"
+root = ".."
+
+[project.entry-points."odin_data.plugins"]
+tristan = "tristan_detector.control.tristan_adapter:TristanAdapter"
+tristan_meta_writer = "tristan_detector.tristan_meta_writer:TristanMetaWriter"
+
+[project.scripts]
+tristan_control = "odin.main:main"
+tristan_meta_writer = "odin_data.meta_writer.meta_writer_app:main"
+tristan_simulator = "tristan_detector.control.control_simulator:main"
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "mypy",
+    "flake8",
+    "flake8-isort",
+    "pytest-cov",
+    "pytest-asyncio",
+    "sphinx-rtd-theme-github-versions",
+    "pre-commit",
+    "requests",
+]
