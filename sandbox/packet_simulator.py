@@ -1,14 +1,20 @@
-import os
 import argparse
-import h5py
-import sys
+
 from timepix_packet_sender import TimepixPacketSender
-from timepix_vds_writer import TimepixVdsWriter
+
 
 def options():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--samples", type=int, default=1000000, help="Number of sample events to process")
-    parser.add_argument("-d", "--datadir", default="./data", help="Path to raw data ASCII files")
+    parser.add_argument(
+        "-s",
+        "--samples",
+        type=int,
+        default=1000000,
+        help="Number of sample events to process",
+    )
+    parser.add_argument(
+        "-d", "--datadir", default="./data", help="Path to raw data ASCII files"
+    )
     args = parser.parse_args()
     return args
 

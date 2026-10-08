@@ -1,8 +1,9 @@
 import h5py
 
-class NexusSwmrFileReader(object):
+
+class NexusSwmrFileReader:
     def __init__(self, filename):
-        self.nx_file = h5py.File(filename, 'r', libver='latest', swmr=True)
+        self.nx_file = h5py.File(filename, "r", libver="latest", swmr=True)
 
         self._event_id_dset = self.nx_file["/entry/data/event/event_id"]
         self._event_index_dset = self.nx_file["/entry/data/event/event_index"]
@@ -24,9 +25,9 @@ class NexusSwmrFileReader(object):
         self.nx_file.close()
 
 
-class NexusSwmrFileWriter(object):
+class NexusSwmrFileWriter:
     def __init__(self, filename):
-        self.nx_file = h5py.File(filename, 'w', libver='latest', swmr=True)
+        self.nx_file = h5py.File(filename, "w", libver="latest", swmr=True)
 
         self.entry_group = self.nx_file.create_group("entry")
         self.entry_group.attrs["NX_class"] = "NXentry"
@@ -37,10 +38,17 @@ class NexusSwmrFileWriter(object):
         self.detector_group = self.instrument_group.create_group("detector")
         self.detector_group.attrs["NX_class"] = "NXdetector"
 
-        self._detector_dset = self.detector_group.create_dataset("detector_number", shape=(256, 256),
-                                                                 maxshape=(256, 256), chunks=(256, 256), dtype='i4')
+        self._detector_dset = self.detector_group.create_dataset(
+            "detector_number",
+            shape=(256, 256),
+            maxshape=(256, 256),
+            chunks=(256, 256),
+            dtype="i4",
+        )
 
-        self._cue_desc_dset = self.detector_group.create_dataset("cue_description", shape=(3,), maxshape=(3,), dtype='S32')
+        self._cue_desc_dset = self.detector_group.create_dataset(
+            "cue_description", shape=(3,), maxshape=(3,), dtype="S32"
+        )
 
         self.data_group = self.entry_group.create_group("data")
         self.data_group.attrs["NX_class"] = "NXdata"
@@ -48,26 +56,48 @@ class NexusSwmrFileWriter(object):
         self.event_group = self.data_group.create_group("event")
         self.event_group.attrs["NX_class"] = "NXevent_data"
 
-        self._event_id_dset = self.event_group.create_dataset("event_id", shape=(1,), maxshape=(None,),
-                                                             chunks=(1024 * 1024,), dtype='i4')
-        self._event_time_offset = self.event_group.create_dataset("event_time_offset", shape=(1,), maxshape=(None,),
-                                                                 chunks=(1024 * 1024,), dtype='i8')
+        self._event_id_dset = self.event_group.create_dataset(
+            "event_id", shape=(1,), maxshape=(None,), chunks=(1024 * 1024,), dtype="i4"
+        )
+        self._event_time_offset = self.event_group.create_dataset(
+            "event_time_offset",
+            shape=(1,),
+            maxshape=(None,),
+            chunks=(1024 * 1024,),
+            dtype="i8",
+        )
 
-        self._event_index_dset = self.event_group.create_dataset("event_index", shape=(1,), maxshape=(None,),
-                                                              chunks=(1024 * 1024,), dtype='i4')
+        self._event_index_dset = self.event_group.create_dataset(
+            "event_index",
+            shape=(1,),
+            maxshape=(None,),
+            chunks=(1024 * 1024,),
+            dtype="i4",
+        )
 
-        self._event_time_zero_dset = self.event_group.create_dataset("event_time_zero", shape=(1,), maxshape=(None,),
-                                                              chunks=(1024 * 1024,), dtype='i8')
+        self._event_time_zero_dset = self.event_group.create_dataset(
+            "event_time_zero",
+            shape=(1,),
+            maxshape=(None,),
+            chunks=(1024 * 1024,),
+            dtype="i8",
+        )
 
-        self._cue_index_dset = self.event_group.create_dataset("cue_index", shape=(1,), maxshape=(None,),
-                                                               chunks=(1024 * 1024,), dtype='i4')
+        self._cue_index_dset = self.event_group.create_dataset(
+            "cue_index", shape=(1,), maxshape=(None,), chunks=(1024 * 1024,), dtype="i4"
+        )
 
-        self._cue_id_dset = self.event_group.create_dataset("cue_id", shape=(1,), maxshape=(None,),
-                                                            chunks=(1024 * 1024,), dtype='i4')
+        self._cue_id_dset = self.event_group.create_dataset(
+            "cue_id", shape=(1,), maxshape=(None,), chunks=(1024 * 1024,), dtype="i4"
+        )
 
-        self._cue_timestamp_zero_dset = self.event_group.create_dataset("cue_timestamp_zero", shape=(1,),
-                                                                        maxshape=(None,), chunks=(1024 * 1024,),
-                                                                        dtype='i8')
+        self._cue_timestamp_zero_dset = self.event_group.create_dataset(
+            "cue_timestamp_zero",
+            shape=(1,),
+            maxshape=(None,),
+            chunks=(1024 * 1024,),
+            dtype="i8",
+        )
 
         self.cue_desc_dset[0] = "Shutter Open"
         self.cue_desc_dset[1] = "Shutter Close"
@@ -113,4 +143,3 @@ class NexusSwmrFileWriter(object):
 
     def close(self):
         self.nx_file.close()
-

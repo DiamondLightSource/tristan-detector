@@ -1,18 +1,12 @@
-
-
-import os, time
 import argparse
-import zmq
-import json
-import curses
+import time
 
-import os
 from odin_data.control.ipc_client import IpcClient
 from odin_data.control.ipc_message import IpcMessage
 
 
 def send_configuration(self, config, target):
-    success, reply = self._client.send_configuration(config, target)
+    _success, _reply = self._client.send_configuration(config, target)
 
 
 def options():
@@ -29,17 +23,15 @@ def main():
 
     while True:
         msg = IpcMessage("cmd", "status")
-        success, reply = client._send_message(msg, 1.0)
-        #print(reply)
+        _success, reply = client._send_message(msg, 1.0)
+        # print(reply)
         if reply is not None:
-            empty = reply['params']['buffers']['empty']
-            mapped = reply['params']['buffers']['mapped']
+            empty = reply["params"]["buffers"]["empty"]
+            mapped = reply["params"]["buffers"]["mapped"]
             total = empty + mapped
-            print("Buffers Free {} out of a total {}".format(empty, total))
+            print(f"Buffers Free {empty} out of a total {total}")
         time.sleep(1.0)
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
-

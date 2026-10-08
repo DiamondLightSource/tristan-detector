@@ -1,7 +1,7 @@
 import numpy as np
 
-class TimepixPacket(object):
 
+class TimepixPacket:
     def __init__(self, packet_number=1, time_slice_id=1):
         self._size_of_packet = 1024
         self._producer_id = 1
@@ -18,12 +18,12 @@ class TimepixPacket(object):
 
     def create_header(self):
         header = 0xE000000000000000
-        header |= (self._producer_id << 50)
-        header |= (self._time_slice_id << 18)
-        header |= (self._word_count+2)
+        header |= self._producer_id << 50
+        header |= self._time_slice_id << 18
+        header |= self._word_count + 2
         self._header1 = header
         header = 0xE400000000000000
-        header |= (self._packet_number)
+        header |= self._packet_number
         self._header2 = header
 
     @property
@@ -35,19 +35,18 @@ class TimepixPacket(object):
         self.create_header()
         packet_data[0] = self._header1
         packet_data[1] = self._header2
-        packet_data[2:self.word_count+2] = self._data
+        packet_data[2 : self.word_count + 2] = self._data
         return packet_data.tostring()
 
     def from_bytes(self, input_bytes):
         packet_data = np.fromstring(input_bytes, dtype=np.uint64)
         self._header1 = packet_data[0]
         self._header2 = packet_data[1]
-        self._data = packet_data[1:len(packet_data - 1)]
+        self._data = packet_data[1 : len(packet_data - 1)]
 
     def report(self):
         self.create_header()
-        print("{0:0{1}x}".format(self._header1,16).upper())
-        print("{0:0{1}x}".format(self._header2,16).upper())
+        print("{0:0{1}x}".format(self._header1, 16).upper())
+        print("{0:0{1}x}".format(self._header2, 16).upper())
         for word in self._data:
-            print("{0:0{1}x}".format(word,16).upper())
-
+            print("{0:0{1}x}".format(word, 16).upper())
