@@ -52,6 +52,7 @@ tristan_meta_writer = "tristan_detector.data.tristan_meta_writer:TristanMetaWrit
 where = ["src"]
 
 [tool.setuptools_scm]
+root = ".."
 version_file = "src/tristan_detector/_version.py"
 
 [tool.pytest.ini_options]
