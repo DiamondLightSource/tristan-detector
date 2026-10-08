@@ -11,11 +11,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 description = "Tristan detector for odin control"
-dependencies = [
-    "odin_control~=2.1.0",
-    "tornado>=4.3",
-    "python-dateutil",
-]
+dependencies = ["odin_control~=2.1.0", "tornado>=4.3", "python-dateutil"]
 dynamic = ["version"]
 license.file = "LICENSE"
 readme = "README.md"
