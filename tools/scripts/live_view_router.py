@@ -1,8 +1,9 @@
-import zmq
-#import numpy as np
-#import matplotlib.pyplot as plt
-#import matplotlib.animation as animation
+# import numpy as np
+# import matplotlib.pyplot as plt
+# import matplotlib.animation as animation
 from datetime import datetime
+
+import zmq
 
 context = zmq.Context()
 
@@ -11,19 +12,19 @@ subscriber = context.socket(zmq.SUB)
 subscriber.setsockopt(zmq.IDENTITY, "Hello")
 subscriber.setsockopt(zmq.SUBSCRIBE, "TP1")
 subscriber.setsockopt(zmq.SNDHWM, 5)
-subscriber.connect ("tcp://192.168.1.2:5555")
+subscriber.connect("tcp://192.168.1.2:5555")
 
 publisher = context.socket(zmq.PUB)
-#publisher.setsockopt(zmq.IDENTITY, "Test")
-#publisher.setsockopt(zmq.PUBLISH, "")
-#publisher.setsockopt(zmq.LINGER, 500)
+# publisher.setsockopt(zmq.IDENTITY, "Test")
+# publisher.setsockopt(zmq.PUBLISH, "")
+# publisher.setsockopt(zmq.LINGER, 500)
 publisher.bind("tcp://*:9999")
 
 # Get updates, expect random Ctrl-C death
 print("Collecting updates from ViewFinder server...")
 while True:
-    #plt.cla()
-    start = datetime.now()
+    # plt.cla()
+    start = datetime.now(tz=datetime.timezone.utc)
     message = subscriber.recv_multipart()
     header = message[0]
     data = message[1]
@@ -31,13 +32,13 @@ while True:
 
     frame_num = 0
     new_header = {
-        'frame_num': frame_num,
-        'acquisition_id': '',
-        'dtype': 'u8',
-        'dsize': 1,
-        'dataset': 'data',
-        'compression': 0,
-        'shape': ["512", "2048"]
+        "frame_num": frame_num,
+        "acquisition_id": "",
+        "dtype": "u8",
+        "dsize": 1,
+        "dataset": "data",
+        "compression": 0,
+        "shape": ["512", "2048"],
     }
     publisher.send_json(new_header, flags=zmq.SNDMORE)
     publisher.send(data, 0)

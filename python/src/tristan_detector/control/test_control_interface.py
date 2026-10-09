@@ -1,19 +1,31 @@
 """
 Created on 19 September 2017
-This opens a direct channel to the detector and sends it a few commands and logs the responses.
+This opens a direct channel to the detector and sends it a few
+commands and logs the responses.
+
 @author: Alan Greer
 """
 
 
-import logging
 import argparse
+import logging
+
 from .latrd_channel import LATRDChannel
-from .latrd_message import LATRDMessage, GetMessage, PutMessage, PostMessage, ResponseMessage
+from .latrd_message import (
+    GetMessage,
+    LATRDMessage,
+    PostMessage,
+    PutMessage,
+)
 
 
 def options():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--control", default="tcp://172.23.244.54:5000", help="Control endpoint")
+    parser.add_argument(
+        "-c", "--control",
+        default="tcp://172.23.244.54:5000",
+        help="Control endpoint",
+    )
     args = parser.parse_args()
     return args
 

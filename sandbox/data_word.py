@@ -1,18 +1,21 @@
 import re
 
+
 class DataWordException(Exception):
     pass
 
-class DataWord(object):
 
+class DataWord:
     COURSE_ROLLOVER = 0x00000000001FFFFF
 
     def __init__(self, line_in):
-        self._raw_packet = re.sub("[\s]","",line_in)
-        self._raw_packet = re.sub("\x00","",self._raw_packet)   # Found a badly formatted file
-        self._raw_packet = re.sub(",$","",self._raw_packet)
+        self._raw_packet = re.sub(r"[\s]", "", line_in)
+        self._raw_packet = re.sub(
+            "\x00", "", self._raw_packet
+        )  # Found a badly formatted file
+        self._raw_packet = re.sub(",$", "", self._raw_packet)
         self._raw_packet = self._raw_packet.upper()
-        line_tmp = re.sub("^","0x0",self._raw_packet)
+        line_tmp = re.sub("^", "0x0", self._raw_packet)
         self._packet = int(line_tmp, 16)
 
     @property
@@ -22,16 +25,12 @@ class DataWord(object):
     @property
     def is_ctrl(self):
         ctrl_data = self._packet & 0x8000000000000000
-        if ctrl_data == 0:
-            return False
-        return True
+        return ctrl_data != 0
 
     @property
     def is_event(self):
         ctrl_data = self._packet & 0x8000000000000000
-        if ctrl_data == 0:
-            return True
-        return False
+        return ctrl_data == 0
 
     @property
     def ctrl_type(self):
@@ -75,9 +74,15 @@ class DataWord(object):
             prev_course = course - self.COURSE_ROLLOVER
         if not self.is_event:
             raise DataWordException()
-        if self.find_match_ts(course) == self.find_match_ts(self.timestamp_fine) or self.find_match_ts(course)+1 == self.find_match_ts(self.timestamp_fine):
+        if self.find_match_ts(course) == self.find_match_ts(
+            self.timestamp_fine
+        ) or self.find_match_ts(course) + 1 == self.find_match_ts(self.timestamp_fine):
             full_ts = (course & 0x0FFFFFFF800000) + self.timestamp_fine
-        elif self.find_match_ts(prev_course) == self.find_match_ts(self.timestamp_fine) or self.find_match_ts(prev_course)+1 == self.find_match_ts(self.timestamp_fine):
+        elif self.find_match_ts(prev_course) == self.find_match_ts(
+            self.timestamp_fine
+        ) or self.find_match_ts(prev_course) + 1 == self.find_match_ts(
+            self.timestamp_fine
+        ):
             full_ts = (prev_course & 0x0FFFFFFF800000) + self.timestamp_fine
         else:
             print("********* Warning ***********")

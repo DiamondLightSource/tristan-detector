@@ -1,14 +1,15 @@
 import socket
 import time
+
 from ascii_stack_reader import AsciiStackReader
 from data_word import DataWord
 from timepix_packet import TimepixPacket
 
 
-class TimepixPacketSender(object):
+class TimepixPacketSender:
     def __init__(self, data_dir):
         self._asr = AsciiStackReader(data_dir)
-        for x in range(0, 50000):
+        for x in range(50000):
             self._asr.read_next()
 
         self._data_dir = data_dir
@@ -28,7 +29,7 @@ class TimepixPacketSender(object):
     def open_connection(self, destination_addresses):
         (self._host, self._port) = ([], [])
         for index in destination_addresses:
-            (host, port) = index.split(':')
+            (host, port) = index.split(":")
             self._host.append(host)
             self._port.append(int(port))
 
@@ -46,17 +47,13 @@ class TimepixPacketSender(object):
         eof = False
         udp_packet = TimepixPacket(self._packet_id)
         while not eof:
-
             data = self._asr.read_next()  # readline()
             if data is None:
                 eof = True
                 continue
             word = DataWord(data)
 
-            if self._timestamp_course == 0:
-                # We want a course timestamp before anything else
-                if not word.is_event:
-                    if word.ctrl_type == 0x20:  # Extended Time
+            if self._timestamp_course == 0 and not word.is_event and word.ctrl_type == 0x20:  # Extended Time
                         print("Extended time found at index", self._count)
                         self._timestamp_word = word
                         udp_packet.add_word(self._timestamp_word.raw)
@@ -69,7 +66,7 @@ class TimepixPacketSender(object):
                     print("=== Packet ID ===", udp_packet._packet_number)
                     udp_packet.report()
                     self._packets.append(udp_packet)
-                    #self.send_packet(udp_packet)
+                    # self.send_packet(udp_packet)
                     self._packet_id += 1
                     self._timeslice_counter += 1
                     if self._timeslice_counter == 20:
@@ -83,7 +80,6 @@ class TimepixPacketSender(object):
                     if word.ctrl_type == 0x20:  # Extended Time
                         print("Extended time found at index", self._count)
                         self._timestamp_word = word
-
 
             if self._count == samples:
                 eof = True

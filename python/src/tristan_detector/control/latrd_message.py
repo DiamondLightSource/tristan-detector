@@ -1,43 +1,45 @@
 import json
-import datetime
 
-class LATRDMessageException(Exception):
-    
+
+class LATRDMessageException(Exception):  # noqa: N818
     def __init__(self, msg, errno=None):
         self.msg = msg
         self.errno = errno
-        
+
     def __str__(self):
         return str(self.msg)
-    
-class LATRDMessage(object):
+
+
+class LATRDMessage:
     msg_counter = 0
 
-    MSG_ID            = 'msg_id'
-    MSG_PARAMETERS    = 'parameters'
-    MSG_TYPE          = 'msg_type'
-    MSG_TYPE_GET      = 'get'
-    MSG_TYPE_PUT      = 'put'
-    MSG_TYPE_POST     = 'post'
-    MSG_TYPE_RESPONSE = 'response'
+    MSG_ID = "msg_id"
+    MSG_PARAMETERS = "parameters"
+    MSG_TYPE = "msg_type"
+    MSG_TYPE_GET = "get"
+    MSG_TYPE_PUT = "put"
+    MSG_TYPE_POST = "post"
+    MSG_TYPE_RESPONSE = "response"
 
-    RESPONSE_TYPE     = 'resp_type'
-    MSG_DATA          = 'data'
+    RESPONSE_TYPE = "resp_type"
+    MSG_DATA = "data"
 
     def __init__(self, msg_type=None, msg_id=None, from_str=None):
         self._attrs = {}
-        
+
         if not from_str:
             self._attrs[self.MSG_TYPE] = msg_type
-            self._attrs[self.MSG_ID]  = msg_id
+            self._attrs[self.MSG_ID] = msg_id
             self._attrs[self.MSG_PARAMETERS] = {}
-            
+
         else:
             try:
                 self._attrs = json.loads(from_str)
-                
+
             except ValueError as e:
-                raise LATRDMessageException("Illegal message JSON format: " + str(e))
+                raise LATRDMessageException(
+                    "Illegal message JSON format: " + str(e)
+                ) from e
 
     @property
     def msg_type(self):
@@ -62,35 +64,39 @@ class LATRDMessage(object):
     def get_param(self, param_name):
         try:
             param_value = self._attrs[self.MSG_PARAMETERS][param_name]
-        except KeyError as e:
-            raise LATRDMessageException("Missing parameter " + param_name)
+        except KeyError:
+            raise LATRDMessageException(
+                "Missing parameter " + param_name
+            ) from None
 
         return param_value
-    
+
     def set_param(self, param_name, param_value):
-        if not self.MSG_PARAMETERS in self._attrs:
+        if self.MSG_PARAMETERS not in self._attrs:
             self._attrs[self.MSG_PARAMETERS] = {}
-            
+
         self._attrs[self.MSG_PARAMETERS][param_name] = param_value
-        
+
     # @return a bytes-like object, not a string.
     def encode(self):
-        return json.dumps(self._attrs).encode();
-    
+        return json.dumps(self._attrs).encode()
+
     def __eq__(self, other):
         return self._attrs == other.attrs
-    
+
     def __ne__(self, other):
         return self._attrs != other.attrs
-    
+
     def __str__(self):
-        return json.dumps(self._attrs, sort_keys=True, indent=4, separators=(',', ': '))
-    
+        return json.dumps(self._attrs, sort_keys=True, indent=4, separators=(",", ": "))
+
     def _get_attr(self, attr_name):
         try:
             attr_value = self._attrs[attr_name]
-        except KeyError as e:
-            raise LATRDMessageException("Missing attribute " + attr_name)
+        except KeyError:
+            raise LATRDMessageException(
+                "Missing attribute " + attr_name
+            ) from None
 
         return attr_value
 
@@ -117,7 +123,9 @@ class LATRDMessage(object):
                 resp_type = msg.get_attribute(LATRDMessage.RESPONSE_TYPE)
             reply_msg = ResponseMessage(msg.msg_id, data, resp_type)
         else:
-            raise LATRDMessageException("Cannot parse unknown message type: {}".format(msg.msg_type))
+            raise LATRDMessageException(
+                f"Cannot parse unknown message type: {msg.msg_type}"
+            )
         return reply_msg
 
 
@@ -125,7 +133,9 @@ class GetMessage(LATRDMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super(GetMessage, self).__init__(msg_type=LATRDMessage.MSG_TYPE_GET, msg_id=msg_id)
+        super().__init__(
+            msg_type=LATRDMessage.MSG_TYPE_GET, msg_id=msg_id
+        )
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
@@ -134,7 +144,9 @@ class PutMessage(LATRDMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super(PutMessage, self).__init__(msg_type=LATRDMessage.MSG_TYPE_PUT, msg_id=msg_id)
+        super().__init__(
+            msg_type=LATRDMessage.MSG_TYPE_PUT, msg_id=msg_id
+        )
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
@@ -143,7 +155,9 @@ class PostMessage(LATRDMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super(PostMessage, self).__init__(msg_type=LATRDMessage.MSG_TYPE_POST, msg_id=msg_id)
+        super().__init__(
+            msg_type=LATRDMessage.MSG_TYPE_POST, msg_id=msg_id
+        )
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
@@ -155,7 +169,9 @@ class ResponseMessage(LATRDMessage):
     def __init__(self, msg_id=None, data=None, response_type=RESPONSE_OK):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super(ResponseMessage, self).__init__(msg_type=LATRDMessage.MSG_TYPE_RESPONSE, msg_id=msg_id)
+        super().__init__(
+            msg_type=LATRDMessage.MSG_TYPE_RESPONSE, msg_id=msg_id
+        )
         del self._attrs[self.MSG_PARAMETERS]
         self._attrs[self.RESPONSE_TYPE] = response_type
         if data:
@@ -166,4 +182,3 @@ class ResponseMessage(LATRDMessage):
     @property
     def data(self):
         return self._attrs[self.MSG_DATA]
-

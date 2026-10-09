@@ -4,104 +4,114 @@ LATRDProducer - load LATRD packets from packet capture file and send via UDP.
 Tim Nicholls, STFC Application Engineering Group.
 """
 
-import struct
-import logging
 import argparse
+import logging
 import os
 import socket
-import time
-import random
+import struct
 import threading
+import time
+
+logger = logging.getLogger(__name__)
 
 
-class TristanDefinitions(object):
-    IDLE_PACKET_MASK       = 0x000000000003F800
-    PRODUCER_ID_MASK       = 0x03FC000000000000
-    TIME_SLICE_WRAP_MASK   = 0x0003FFFFFFFC0000
+class TristanDefinitions:
+    IDLE_PACKET_MASK = 0x000000000003F800
+    PRODUCER_ID_MASK = 0x03FC000000000000
+    TIME_SLICE_WRAP_MASK = 0x0003FFFFFFFC0000
     TIME_SLICE_BUFFER_MASK = 0x000000FF00000000
-    WORD_COUNT_MASK        = 0x00000000000007FF
-    PACKET_ID_MASK         = 0x00000000FFFFFFFF
-    COURSE_TIMESTAMP_MASK  = 0x000FFFFFFFFFFFF8
-    FINE_TIMESTAMP_MASK    = 0x00000000007FFFFF
-    ENERGY_MASK            = 0x0000000000003FFF
-    POSITION_MASK          = 0x0000000003FFFFFF
+    WORD_COUNT_MASK = 0x00000000000007FF
+    PACKET_ID_MASK = 0x00000000FFFFFFFF
+    COURSE_TIMESTAMP_MASK = 0x000FFFFFFFFFFFF8
+    FINE_TIMESTAMP_MASK = 0x00000000007FFFFF
+    ENERGY_MASK = 0x0000000000003FFF
+    POSITION_MASK = 0x0000000003FFFFFF
     TIMESTAMP_CONTROL_WORD = 0x8000000000000000
-    HEADER_WORD_1          = 0x0000000000000000
-    HEADER_WORD_2          = 0xE000000000000000
-    HEADER_WORD_3          = 0xE400000000000000
-    NO_OF_BUFFERS          = 4
+    HEADER_WORD_1 = 0x0000000000000000
+    HEADER_WORD_2 = 0xE000000000000000
+    HEADER_WORD_3 = 0xE400000000000000
+    NO_OF_BUFFERS = 4
 
 
-class TristanData(object):
+class TristanData:
     WORD_INDEX = 0
-#    TIMESTAMP = 9033808973057
+    #    TIMESTAMP = 9033808973057
     TIMESTAMP = 0
     TIME_SLICE_NUMBER = 0
     PACKET_NUMBER = 0
 
 
-class TristanTimestampWord(object):
+class TristanTimestampWord:
     def __init__(self, ts):
         self._ts = ts
 
     def to_64_bit_word(self):
-        data_word = (self._ts&TristanDefinitions.COURSE_TIMESTAMP_MASK) | TristanDefinitions.TIMESTAMP_CONTROL_WORD
+        data_word = (
+            self._ts & TristanDefinitions.COURSE_TIMESTAMP_MASK
+        ) | TristanDefinitions.TIMESTAMP_CONTROL_WORD
         return data_word
 
 
-class TristanWord(object):
+class TristanWord:
     def __init__(self, ts):
         self._index = TristanData.WORD_INDEX
-        TristanData.WORD_INDEX+=1
+        TristanData.WORD_INDEX += 1
         self._ts = ts
 
     def to_64_bit_word(self):
-        data_word = (self._index&TristanDefinitions.POSITION_MASK)<<37 | \
-                    (self._ts&TristanDefinitions.FINE_TIMESTAMP_MASK)<<14
+        data_word = (self._index & TristanDefinitions.POSITION_MASK) << 37 | (
+            self._ts & TristanDefinitions.FINE_TIMESTAMP_MASK
+        ) << 14
         return data_word
 
 
-class TristanIdlePacket(object):
+class TristanIdlePacket:
     def __init__(self):
         self._words = [
             0x0000000000000003,
             0xE00000000003F803,
             0xE400000000000000,
-            0xFC00000000000000
+            0xFC00000000000000,
         ]
 
     def to_packet(self):
-        byte_array = struct.pack('<Q', self._words[0])
-        byte_array += struct.pack('<Q', self._words[1])
-        byte_array += struct.pack('<Q', self._words[2])
-        byte_array += struct.pack('<Q', self._words[3])
+        byte_array = struct.pack("<Q", self._words[0])
+        byte_array += struct.pack("<Q", self._words[1])
+        byte_array += struct.pack("<Q", self._words[2])
+        byte_array += struct.pack("<Q", self._words[3])
         return byte_array
 
 
-class TristanPacket(object):
+class TristanPacket:
     def __init__(self, words, time_slice):
         self._words = []
 
         # Calculate the current course and fine timestamp
-        self._course_ts = TristanData.TIMESTAMP&TristanDefinitions.COURSE_TIMESTAMP_MASK
-        self._fine_ts = TristanData.TIMESTAMP&TristanDefinitions.FINE_TIMESTAMP_MASK
+        self._course_ts = (
+            TristanData.TIMESTAMP & TristanDefinitions.COURSE_TIMESTAMP_MASK
+        )
+        self._fine_ts = TristanData.TIMESTAMP & TristanDefinitions.FINE_TIMESTAMP_MASK
 
         self._ts_word = TristanTimestampWord(self._course_ts)
         extra_words = 0
 
         for index in range(words):
-            if index > 0:
-                if self._fine_ts&TristanDefinitions.FINE_TIMESTAMP_MASK == 0:
-                    self._course_ts = TristanData.TIMESTAMP&TristanDefinitions.COURSE_TIMESTAMP_MASK
-                    self._words.append(TristanTimestampWord(self._course_ts))
-                    extra_words += 1
+            if (
+                index > 0
+                and self._fine_ts & TristanDefinitions.FINE_TIMESTAMP_MASK == 0
+            ):
+                self._course_ts = (
+                    TristanData.TIMESTAMP & TristanDefinitions.COURSE_TIMESTAMP_MASK
+                )
+                self._words.append(TristanTimestampWord(self._course_ts))
+                extra_words += 1
             self._words.append(TristanWord(self._fine_ts))
             self._fine_ts += 1
             TristanData.TIMESTAMP += 1
 
         # Record the header information
-        self._ts_buffer = time_slice%TristanDefinitions.NO_OF_BUFFERS
-        self._ts_wrap = int(time_slice/TristanDefinitions.NO_OF_BUFFERS)
+        self._ts_buffer = time_slice % TristanDefinitions.NO_OF_BUFFERS
+        self._ts_wrap = int(time_slice / TristanDefinitions.NO_OF_BUFFERS)
         self._packet = TristanData.PACKET_NUMBER
         TristanData.PACKET_NUMBER += 1
 
@@ -112,13 +122,17 @@ class TristanPacket(object):
         # Word count is no of words + 1 for timestamp + 2 for header words
         # plus any additional timestamp words required for wrapping
         word_count = words + 3 + extra_words
-        self._hdr_2 = TristanDefinitions.HEADER_WORD_2 | \
-                      (word_count&TristanDefinitions.WORD_COUNT_MASK) | \
-                      ((self._ts_wrap<<18)&TristanDefinitions.TIME_SLICE_WRAP_MASK)
+        self._hdr_2 = (
+            TristanDefinitions.HEADER_WORD_2
+            | (word_count & TristanDefinitions.WORD_COUNT_MASK)
+            | ((self._ts_wrap << 18) & TristanDefinitions.TIME_SLICE_WRAP_MASK)
+        )
         # Header 3 contains time slice buffer number and the packet ID
-        self._hdr_3 = TristanDefinitions.HEADER_WORD_3 | \
-                      ((self._ts_buffer<<32)&TristanDefinitions.TIME_SLICE_BUFFER_MASK) | \
-                      (self._packet&TristanDefinitions.PACKET_ID_MASK)
+        self._hdr_3 = (
+            TristanDefinitions.HEADER_WORD_3
+            | ((self._ts_buffer << 32) & TristanDefinitions.TIME_SLICE_BUFFER_MASK)
+            | (self._packet & TristanDefinitions.PACKET_ID_MASK)
+        )
 
     def to_packet(self):
         words = [self._hdr_1, self._hdr_2, self._hdr_3, self._ts_word.to_64_bit_word()]
@@ -127,9 +141,9 @@ class TristanPacket(object):
         byte_array = None
         for word in words:
             if byte_array is None:
-                byte_array = struct.pack('<Q', word)
+                byte_array = struct.pack("<Q", word)
             else:
-                byte_array += struct.pack('<Q', word)
+                byte_array += struct.pack("<Q", word)
         return byte_array
 
 
@@ -137,16 +151,16 @@ class Range(argparse.Action):
     """
     Range validating action for argument parser.
     """
+
     def __init__(self, min=None, max=None, *args, **kwargs):
         self.min = min
         self.max = max
-        kwargs["metavar"] = "[%d-%d]" % (self.min, self.max)
-        super(Range, self).__init__(*args, **kwargs)
+        kwargs["metavar"] = f"[{self.min}-{self.max}]"
+        super().__init__(*args, **kwargs)
 
     def __call__(self, parser, namespace, value, option_string=None):
         if not self.min <= value <= self.max:
-            msg = 'invalid choice: %r (choose from [%d-%d])' % \
-                  (value, self.min, self.max)
+            msg = f"invalid choice: {value!r} (choose from [{self.min}-{self.max}])"
             raise argparse.ArgumentError(self, msg)
         setattr(namespace, self.dest, value)
 
@@ -155,45 +169,46 @@ class CsvAction(argparse.Action):
     """
     Comma separated list of values action for argument parser.
     """
+
     def __init__(self, val_type=None, *args, **kwargs):
-        self.val_type =val_type
-        super(CsvAction, self).__init__(*args, **kwargs)
+        self.val_type = val_type
+        super().__init__(*args, **kwargs)
 
     def __call__(self, parser, namespace, value, option_string=None):
-        item_list=[]
+        item_list = []
         try:
-            for item_str in value.split(','):
+            for item_str in value.split(","):
                 item_list.append(self.val_type(item_str))
         except ValueError as e:
             raise argparse.ArgumentError(self, e)
         setattr(namespace, self.dest, item_list)
 
 
-class LATRDProducerDefaults(object):
+class LATRDProducerDefaults:
     """
     Holds default values for frame producer parameters.
     """
 
     def __init__(self):
 
-        self.ip_addr = 'localhost'
-        self.port_list = '61649'
+        self.ip_addr = "localhost"
+        self.port_list = "61649"
         self.num_events = 500000
         self.num_idle = 5
         self.duration = 6.0
         self.drop_frac = 0
         self.drop_list = None
 
-        self.log_level = 'info'
+        self.log_level = "info"
         self.log_levels = {
-            'error': logging.ERROR,
-            'warning': logging.WARNING,
-            'info': logging.INFO,
-            'debug': logging.DEBUG,
+            "error": logging.ERROR,
+            "warning": logging.WARNING,
+            "info": logging.INFO,
+            "debug": logging.DEBUG,
         }
 
 
-class LATRDFrameProducer(object):
+class LATRDFrameProducer:
     """
     LATRD frame procducer - loads frame packets data from capture file and replays it to
     a receiver via a UDP socket.
@@ -225,60 +240,99 @@ class LATRDFrameProducer(object):
 
         # Set the terminal width for argument help formatting
         try:
-            term_columns = int(os.environ['COLUMNS']) - 2
+            term_columns = int(os.environ["COLUMNS"]) - 2
         except (KeyError, ValueError):
             term_columns = 100
 
         # Build options for the argument parser
         parser = argparse.ArgumentParser(
-            prog='latrd_pcap_replay.py', description='LATRD frame producer',
+            prog="latrd_pcap_replay.py",
+            description="LATRD frame producer",
             formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(
-                prog, max_help_position=40, width=term_columns)
+                prog, max_help_position=40, width=term_columns
+            ),
         )
 
         parser.add_argument(
-            '--address', '-a', type=str, dest='ip_addr',
-            default=self.defaults.ip_addr, metavar='ADDR',
-            help='Hostname or IP address to transmit UDP frame data to'
+            "--address",
+            "-a",
+            type=str,
+            dest="ip_addr",
+            default=self.defaults.ip_addr,
+            metavar="ADDR",
+            help="Hostname or IP address to transmit UDP frame data to",
         )
         parser.add_argument(
-            '--port', '-p', type=str, val_type=int, dest='ports', action=CsvAction,
-            default=self.defaults.port_list, metavar='PORT[,PORT,...]',
-            help='Comma separatied list of port numbers to transmit UDP frame data to'
+            "--port",
+            "-p",
+            type=str,
+            val_type=int,
+            dest="ports",
+            action=CsvAction,
+            default=self.defaults.port_list,
+            metavar="PORT[,PORT,...]",
+            help="Comma separatied list of port numbers to transmit UDP frame data to",
         )
         parser.add_argument(
-            '--events', '-e', type=int, dest='num_events',
-            default=self.defaults.num_events, metavar='FRAMES',
-            help='Number of events to transmit'
+            "--events",
+            "-e",
+            type=int,
+            dest="num_events",
+            default=self.defaults.num_events,
+            metavar="FRAMES",
+            help="Number of events to transmit",
         )
         parser.add_argument(
-            '--duration', '-d', type=float, dest='duration',
-            default=self.defaults.duration, metavar='INTERVAL',
-            help='Duration in seconds for sending data packets'
+            "--duration",
+            "-d",
+            type=float,
+            dest="duration",
+            default=self.defaults.duration,
+            metavar="INTERVAL",
+            help="Duration in seconds for sending data packets",
         )
         parser.add_argument(
-            '--idle', '-i', type=float, dest='num_idle',
-            default=self.defaults.num_idle, metavar='IDLE',
-            help='Number of idle packets to send before and after'
+            "--idle",
+            "-i",
+            type=float,
+            dest="num_idle",
+            default=self.defaults.num_idle,
+            metavar="IDLE",
+            help="Number of idle packets to send before and after",
         )
         parser.add_argument(
-            '--pkt_gap', type=int, dest='pkt_gap', metavar='PACKETS',
-            help='Insert brief pause between every N packets'
+            "--pkt_gap",
+            type=int,
+            dest="pkt_gap",
+            metavar="PACKETS",
+            help="Insert brief pause between every N packets",
         )
         parser.add_argument(
-            '--drop_frac', type=float, dest='drop_frac',
-            min=0.0, max=1.0, action=Range,
-            default=self.defaults.drop_frac, metavar='FRACTION',
-            help='Fraction of packets to drop')
+            "--drop_frac",
+            type=float,
+            dest="drop_frac",
+            min=0.0,
+            max=1.0,
+            action=Range,
+            default=self.defaults.drop_frac,
+            metavar="FRACTION",
+            help="Fraction of packets to drop",
+        )
         parser.add_argument(
-            '--drop_list', type=int, nargs='+', dest='drop_list',
+            "--drop_list",
+            type=int,
+            nargs="+",
+            dest="drop_list",
             default=self.defaults.drop_list,
-            help='Packet number(s) to drop from each frame',
+            help="Packet number(s) to drop from each frame",
         )
         parser.add_argument(
-            '--logging', type=str, dest='log_level',
-            default=self.defaults.log_level, choices=self.defaults.log_levels.keys(),
-            help='Set logging output level'
+            "--logging",
+            type=str,
+            dest="log_level",
+            default=self.defaults.log_level,
+            choices=self.defaults.log_levels.keys(),
+            help="Set logging output level",
         )
 
         # Parse arguments
@@ -292,8 +346,9 @@ class LATRDFrameProducer(object):
 
         # Set up logging
         logging.basicConfig(
-            level=log_level, format='%(levelname)1.1s %(message)s',
-            datefmt='%y%m%d %H:%M:%S'
+            level=log_level,
+            format="%(levelname)1.1s %(message)s",
+            datefmt="%y%m%d %H:%M:%S",
         )
 
     def run(self):
@@ -315,24 +370,24 @@ class LATRDFrameProducer(object):
         time_slice = 0
 
         while generated_events < total_events:
-            time_slice_dict = {'id': time_slice, 'packets': [], 'ts': []}
+            time_slice_dict = {"id": time_slice, "packets": [], "ts": []}
             # Generate a new packet
             slice_events = 0
             while slice_events < per_slice:
                 pkt = TristanPacket(800, time_slice)
-                #print("Packet length bytes: {}".format(len(pkt.to_packet())))
+                # print("Packet length bytes: {}".format(len(pkt.to_packet())))
                 generated_events += 800
-                slice_events+=800
+                slice_events += 800
 
-                time_slice_dict['packets'].append(pkt.to_packet())
-                time_slice_dict['ts'].append(self._pkt_number)
-                #self._packets.append(pkt.to_packet())
-                #self._ts.append(self._pkt_number)
+                time_slice_dict["packets"].append(pkt.to_packet())
+                time_slice_dict["ts"].append(self._pkt_number)
+                # self._packets.append(pkt.to_packet())
+                # self._ts.append(self._pkt_number)
                 self._pkt_number += 1
-            #print("Generated time slice {}".format(time_slice))
+            # print("Generated time slice {}".format(time_slice))
             self._time_slices.append(time_slice_dict)
             time_slice += 1
-            TristanData.PACKET_NUMBER=0
+            TristanData.PACKET_NUMBER = 0
 
     def send_packets(self):
 
@@ -341,16 +396,16 @@ class LATRDFrameProducer(object):
             self.args.ports = [self.args.ports]
 
         self._no_of_ports = len(self.args.ports)
-        logging.info("Launching threads to send packets to {} destination ports".format(
-            len(self.args.ports)
-        ))
+        logger.info(
+            f"Launching threads to send packets to {len(self.args.ports)} destination ports"
+        )
 
-        index = 0
-        for port in self.args.ports:
-            send_thread = threading.Thread(target=self._send_packets, args=(int(port),int(index)))
+        for index, port in enumerate(self.args.ports):
+            send_thread = threading.Thread(
+                target=self._send_packets, args=(int(port), int(index))
+            )
             send_threads.append(send_thread)
             send_thread.start()
-            index += 1
 
     def _send_packets(self, port, index):
         """
@@ -361,88 +416,94 @@ class LATRDFrameProducer(object):
         udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
         if udp_socket is None:
-            logging.error("Failed to open UDP socket")
+            logger.error("Failed to open UDP socket")
             return
-
 
         idle_bytes_sent = 0
         idle_packets_sent = 0
-        logging.info("Sending %d idle packets at 1 Hz", self.args.num_idle)
+        logger.info("Sending %d idle packets at 1 Hz", self.args.num_idle)
         # Start by sending Idle packets at a rate of 1Hz
         for packets in range(int(self.args.num_idle)):
             # Send the packet over the UDP socket
             try:
-                idle_bytes_sent += udp_socket.sendto(self._idle_packet, (self.args.ip_addr, port))
+                idle_bytes_sent += udp_socket.sendto(
+                    self._idle_packet, (self.args.ip_addr, port)
+                )
                 idle_packets_sent += 1
                 # Add 1 second delay
                 time.sleep(1.0)
-            except socket.error as exc:
-                logging.error("Got error sending frame packet: %s", exc)
+            except OSError as exc:
+                logger.error("Got error sending frame packet: %s", exc)
                 break
 
         # Packet delay is total duration / number of packets
         packet_count = 0
         for ts in self._time_slices:
-            if ts['id'] % self._no_of_ports == index:
-                packet_count += len(ts['packets'])
-        logging.info("Sending %d data packets in %f seconds", packet_count, self.args.duration)
+            if ts["id"] % self._no_of_ports == index:
+                packet_count += len(ts["packets"])
+        logger.info(
+            "Sending %d data packets in %f seconds", packet_count, self.args.duration
+        )
         data_bytes_sent = 0
         data_packets_sent = 0
-        delay = float(self.args.duration)/float(packet_count)
-        logging.info("Packet send delay %f", delay)
-        if delay < 0.001:
-            delay = 0.001
-#        for packet, ts_id in zip(self._packets, self._ts):
+        delay = float(self.args.duration) / float(packet_count)
+        logger.info("Packet send delay %f", delay)
+        delay = max(delay, 0.001)
+        #        for packet, ts_id in zip(self._packets, self._ts):
         for ts in self._time_slices:
-            if ts['id'] % self._no_of_ports == index:
+            if ts["id"] % self._no_of_ports == index:
                 # Send the packet over the UDP socket
-                for packet in ts['packets']:
+                for packet in ts["packets"]:
                     try:
-                    #logging.info("Checking port number for %d at index %d", ts_id, index)
-                        #logging.info("Sending UDP packet")
-                        data_bytes_sent += udp_socket.sendto(packet, (self.args.ip_addr, port))
-                        #logging.info("Sent UDP packet")
+                        # logger.info("Checking port number for %d at index %d", ts_id, index)
+                        # logger.info("Sending UDP packet")
+                        data_bytes_sent += udp_socket.sendto(
+                            packet, (self.args.ip_addr, port)
+                        )
+                        # logger.info("Sent UDP packet")
                         data_packets_sent += 1
                         # Add 1 second delay
                         time.sleep(delay)
                         if data_packets_sent % 1000 == 0:
-                            logging.info("Sent %d packets", data_packets_sent)
-                    except socket.error as exc:
-                        logging.error("Got error sending frame packet: %s", exc)
+                            logger.info("Sent %d packets", data_packets_sent)
+                    except OSError as exc:
+                        logger.error("Got error sending frame packet: %s", exc)
                         break
 
         time.sleep(1.0)
         idle_bytes_sent = 0
         idle_packets_sent = 0
-        logging.info("Sending %d idle packets at 1 Hz", self.args.num_idle)
+        logger.info("Sending %d idle packets at 1 Hz", self.args.num_idle)
         # Start by sending Idle packets at a rate of 1Hz
         for packets in range(int(self.args.num_idle)):
             # Send the packet over the UDP socket
             try:
-                idle_bytes_sent += udp_socket.sendto(self._idle_packet, (self.args.ip_addr, port))
+                idle_bytes_sent += udp_socket.sendto(
+                    self._idle_packet, (self.args.ip_addr, port)
+                )
                 idle_packets_sent += 1
                 # Add 1 second delay
                 time.sleep(1.0)
-            except socket.error as exc:
-                logging.error("Got error sending frame packet: %s", exc)
+            except OSError as exc:
+                logger.error("Got error sending frame packet: %s", exc)
                 break
 
         udp_socket.close()
 
-if __name__ == '__main__':
 
+if __name__ == "__main__":
     LATRDFrameProducer().run()
-    #ts = TristanTimestampWord(TristanData.TIMESTAMP)
-    #print("0x{0:016X}".format(ts.to_64_bit_word()))
-    #te = TristanWord(TristanData.TIMESTAMP)
-    #print("0x{0:016X}".format(te.to_64_bit_word()))
-    #te = TristanWord(TristanData.TIMESTAMP)
-    #print("0x{0:016X}".format(te.to_64_bit_word()))
-    #te = TristanWord(TristanData.TIMESTAMP)
-    #print("0x{0:016X}".format(te.to_64_bit_word()))
-    #te = TristanWord(TristanData.TIMESTAMP)
-    #print("0x{0:016X}".format(te.to_64_bit_word()))
-    #te = TristanWord(TristanData.TIMESTAMP)
-    #print("0x{0:016X}".format(te.to_64_bit_word()))
-    #te = TristanWord(TristanData.TIMESTAMP)
-    #print("0x{0:016X}".format(te.to_64_bit_word()))
+    # ts = TristanTimestampWord(TristanData.TIMESTAMP)
+    # print("0x{0:016X}".format(ts.to_64_bit_word()))
+    # te = TristanWord(TristanData.TIMESTAMP)
+    # print("0x{0:016X}".format(te.to_64_bit_word()))
+    # te = TristanWord(TristanData.TIMESTAMP)
+    # print("0x{0:016X}".format(te.to_64_bit_word()))
+    # te = TristanWord(TristanData.TIMESTAMP)
+    # print("0x{0:016X}".format(te.to_64_bit_word()))
+    # te = TristanWord(TristanData.TIMESTAMP)
+    # print("0x{0:016X}".format(te.to_64_bit_word()))
+    # te = TristanWord(TristanData.TIMESTAMP)
+    # print("0x{0:016X}".format(te.to_64_bit_word()))
+    # te = TristanWord(TristanData.TIMESTAMP)
+    # print("0x{0:016X}".format(te.to_64_bit_word()))
