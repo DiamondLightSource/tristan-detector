@@ -117,7 +117,9 @@ class LATRDMessage:
             resp_type = None
             if msg.has_attribute(LATRDMessage.RESPONSE_TYPE):
                 resp_type = msg.get_attribute(LATRDMessage.RESPONSE_TYPE)
-            reply_msg = ResponseMessage(msg.msg_id, data, resp_type)
+                reply_msg = ResponseMessage(msg.msg_id, data, resp_type)
+            else:
+                reply_msg = ResponseMessage(msg.msg_id, data)
         else:
             raise LATRDMessageException(
                 f"Cannot parse unknown message type: {msg.msg_type}"
