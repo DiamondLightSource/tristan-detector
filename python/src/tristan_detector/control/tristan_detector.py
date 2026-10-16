@@ -15,8 +15,6 @@ from typing import cast
 from dateutil.tz import tzlocal
 from odin.adapters.parameter_tree import ParameterTree
 from odin_data.control.odin_data_controller import OdinDataController
-from tornado import escape
-from tornado.httputil import HTTPServerRequest
 
 from .latrd_channel import LATRDChannel
 from .latrd_message import GetMessage, LATRDMessage, PostMessage, PutMessage
@@ -47,18 +45,6 @@ class TristanDetector(OdinDataController):
         "status/sensor/height": "status/detector/y_pixels_in_detector",
         "status/sensor/bytes": "status/detector/bytes",
     }
-
-    DETECTOR_CONFIG_TYPES = {
-        "exposure": float,
-        "repeat_interval": float,
-        "readout_time": float,
-        "frames": int,
-        "frames_per_trigger": int,
-        "ntrigger": int,
-        "threshold": str,
-        "mode": str,
-        "profile": str,
-    }
     DETECTOR_CONFIG = [
         "exposure",
         "frames",
@@ -84,6 +70,7 @@ class TristanDetector(OdinDataController):
         "trigger/ttl_out_term",
         "trigger/tzero",
     ]
+    STATUS_PATHS = ["status", "config", "command"]
     DETECTOR_ENUMS = {
         "mode": ["time_energy", "time_only", "count"],
         "profile": ["standard", "fast", "energy", "user", "current"],
@@ -211,6 +198,16 @@ class TristanDetector(OdinDataController):
 
         # Start with the static/local fields
         _params = {
+            "up_time": (lambda: self._up_time, {}),
+            "start_time": (
+                lambda: self._start_time.strftime("%B %d, %Y %H:%M:%S"),
+                {},
+            ),
+            "username": (lambda: self._username, {}),
+            "module": (lambda: type(self).__name__, {}),
+            "firmware": (lambda: self._firmware, {}),
+            "udp_file": (lambda: self._udp_config_file, {}),
+            "update_interval": (lambda: self._update_interval, {}),
             self.STR_STATUS: {
                 "manufacturer": (lambda: "DLS/STFC", {}),
                 "model": (lambda: "Odin [Tristan]", {}),
@@ -297,9 +294,22 @@ class TristanDetector(OdinDataController):
         self._status_thread = threading.Thread(target=self.update_loop)
         self._status_thread.start()
 
+    def get(self, path, meta=False):
+        """Handle GET requests from the controller interface."""
+        # Handle empty path — return available endpoints
+        if not path:
+            return {"status": self.STATUS_PATHS, "config": self.DETECTOR_CONFIG}
+
+        # Handle ADODIN_MAPPING translation
+        if path in self.ADODIN_MAPPING:
+            path = self.ADODIN_MAPPING[path]
+
+        # Return from parameter tree
+        return self._params.get(path, with_metadata=meta)
+
     def get_value(self, item):
         # Check if the item has a value field. If it does then return it
-        if "value" in item:
+        if isinstance(item, dict) and "value" in item:
             return item["value"]
         return None
 
@@ -319,7 +329,8 @@ class TristanDetector(OdinDataController):
 
         return reply
 
-    def put(self, path: str, value: HTTPServerRequest):
+    def put(self, path, value):
+        """Handle PUT requests from the controller interface."""
         self.clear_error()
         if path in self.ADODIN_MAPPING:
             path = self.ADODIN_MAPPING[path]
@@ -337,7 +348,7 @@ class TristanDetector(OdinDataController):
                     self._send("post", "command", config_items[1])
 
             case "config":
-                command, value_dict = self.uri_params_to_dictionary(path, value.body)
+                command, value_dict = self._parse_config_put(path, value)
                 logger.info("Config command: %s", command)
                 logger.info("Config dict: %s", value_dict)
                 self._send("put", command, value_dict)
@@ -345,18 +356,25 @@ class TristanDetector(OdinDataController):
             case "engineering":
                 # This special command allows an arbitrary JSON object to be
                 # sent to the hardware
-                # The JSON object must be encoded into the body of the PUT request
-                logger.debug(
-                    "PUT request.body: %s", str(escape.url_unescape(value.body))
-                )
-                value_dict = json.loads(str(escape.url_unescape(value.body)))
-                logger.debug(f"Config dict: {value_dict}")
-                value_dict = json.loads(value.body)
+                logger.debug("Engineering PUT: path=%s, data=%s", path, value)
                 msg_type = "put" if "engineering_put" in config_items[0] else "get"
-                self._send(msg_type, "config", value_dict)
+                self._send(msg_type, "config", value)
 
             case _:
                 raise ValueError(f"Unknown path: {path}")
+
+    def delete(self, path):
+        """Handle DELETE requests — not supported for this detector."""
+        raise NotImplementedError(f"DELETE {path} is not supported")
+
+    def _parse_config_put(self, path, data):
+        """Parse a config PUT request into command and value dict."""
+        if data is None:
+            return path, {}
+        if isinstance(data, dict):
+            return path, data
+        # Simple value — wrap in the path structure
+        return path, {"value": data}
 
     def _arm_then_run(self):
         # status_code = 200
@@ -429,58 +447,6 @@ class TristanDetector(OdinDataController):
         logger.info(f"Downloading UDP configuration: {udp_config}")
         reply = self._send("put", "config", udp_config)
         logger.info(f"Reply from message: {reply}")
-
-    # @staticmethod
-    def uri_params_to_dictionary(self, request_command: str, body: bytes):
-        # Parse the parameters
-        request_list = None
-        parameters = None
-        if body == "":
-            # The value will be the final item of the request_command
-            request_list = request_command.split("/")
-            parameters = request_list[-1]
-            try:
-                # Convert the type???
-                parameters = self.DETECTOR_CONFIG_TYPES[request_list[-2]](
-                    float(request_list[-1])
-                )
-            except Exception:
-                parameters = request_list[-1]
-            request_list = request_list[:-1]
-        else:
-            try:
-                parameters = json.loads(str(escape.url_unescape(body)))
-            except ValueError:
-                # If the body could not be parsed into an object,
-                # it may be a simple string
-                parameters = str(escape.url_unescape(body))
-
-        # Check to see if the request contains more than one item
-        if request_command is not None:
-            if request_list is None:
-                request_list = request_command.split("/")
-            logger.debug("URI request list: %s", request_list)
-            param_dict = {}
-            command = None
-            if len(request_list) > 1:
-                # Create a dictionary structure containing the request list
-                current_dict = param_dict
-                for item in request_list[1:-1]:
-                    current_dict[item] = {}
-                    current_dict = current_dict[item]
-
-                item = request_list[-1]
-                current_dict[item] = parameters
-                command = request_list[0]
-            else:
-                param_dict = parameters
-                command = request_command
-        else:
-            param_dict = parameters
-            command = request_command
-
-        logger.error("Command [%s] parameter dictionary: %s", command, param_dict)
-        return command, param_dict
 
     def send_recv(self, msg):
         """
