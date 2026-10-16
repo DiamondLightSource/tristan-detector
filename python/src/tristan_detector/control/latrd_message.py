@@ -65,9 +65,7 @@ class LATRDMessage:
         try:
             param_value = self._attrs[self.MSG_PARAMETERS][param_name]
         except KeyError:
-            raise LATRDMessageException(
-                "Missing parameter " + param_name
-            ) from None
+            raise LATRDMessageException("Missing parameter " + param_name) from None
 
         return param_value
 
@@ -90,13 +88,11 @@ class LATRDMessage:
     def __str__(self):
         return json.dumps(self._attrs, sort_keys=True, indent=4, separators=(",", ": "))
 
-    def _get_attr(self, attr_name):
+    def __getitem__(self, attr_name):
         try:
             attr_value = self._attrs[attr_name]
         except KeyError:
-            raise LATRDMessageException(
-                "Missing attribute " + attr_name
-            ) from None
+            raise LATRDMessageException("Missing attribute " + attr_name) from None
 
         return attr_value
 
@@ -121,7 +117,9 @@ class LATRDMessage:
             resp_type = None
             if msg.has_attribute(LATRDMessage.RESPONSE_TYPE):
                 resp_type = msg.get_attribute(LATRDMessage.RESPONSE_TYPE)
-            reply_msg = ResponseMessage(msg.msg_id, data, resp_type)
+                reply_msg = ResponseMessage(msg.msg_id, data, resp_type)
+            else:
+                reply_msg = ResponseMessage(msg.msg_id, data)
         else:
             raise LATRDMessageException(
                 f"Cannot parse unknown message type: {msg.msg_type}"
@@ -133,9 +131,7 @@ class GetMessage(LATRDMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super().__init__(
-            msg_type=LATRDMessage.MSG_TYPE_GET, msg_id=msg_id
-        )
+        super().__init__(msg_type=LATRDMessage.MSG_TYPE_GET, msg_id=msg_id)
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
@@ -144,9 +140,7 @@ class PutMessage(LATRDMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super().__init__(
-            msg_type=LATRDMessage.MSG_TYPE_PUT, msg_id=msg_id
-        )
+        super().__init__(msg_type=LATRDMessage.MSG_TYPE_PUT, msg_id=msg_id)
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
@@ -155,9 +149,7 @@ class PostMessage(LATRDMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super().__init__(
-            msg_type=LATRDMessage.MSG_TYPE_POST, msg_id=msg_id
-        )
+        super().__init__(msg_type=LATRDMessage.MSG_TYPE_POST, msg_id=msg_id)
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
@@ -169,9 +161,7 @@ class ResponseMessage(LATRDMessage):
     def __init__(self, msg_id=None, data=None, response_type=RESPONSE_OK):
         if not msg_id:
             msg_id = LATRDMessage.new_id()
-        super().__init__(
-            msg_type=LATRDMessage.MSG_TYPE_RESPONSE, msg_id=msg_id
-        )
+        super().__init__(msg_type=LATRDMessage.MSG_TYPE_RESPONSE, msg_id=msg_id)
         del self._attrs[self.MSG_PARAMETERS]
         self._attrs[self.RESPONSE_TYPE] = response_type
         if data:
