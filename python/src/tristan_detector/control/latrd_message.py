@@ -1,7 +1,7 @@
 import json
 
 
-class LATRDMessageException(Exception):  # noqa: N818
+class TristanMessageException(Exception):  # noqa: N818
     def __init__(self, msg, errno=None):
         self.msg = msg
         self.errno = errno
@@ -10,7 +10,7 @@ class LATRDMessageException(Exception):  # noqa: N818
         return str(self.msg)
 
 
-class LATRDMessage:
+class TristanMessage:
     msg_counter = 0
 
     MSG_ID = "msg_id"
@@ -37,7 +37,7 @@ class LATRDMessage:
                 self._attrs = json.loads(from_str)
 
             except ValueError as e:
-                raise LATRDMessageException(
+                raise TristanMessageException(
                     "Illegal message JSON format: " + str(e)
                 ) from e
 
@@ -65,7 +65,7 @@ class LATRDMessage:
         try:
             param_value = self._attrs[self.MSG_PARAMETERS][param_name]
         except KeyError:
-            raise LATRDMessageException("Missing parameter " + param_name) from None
+            raise TristanMessageException("Missing parameter " + param_name) from None
 
         return param_value
 
@@ -92,76 +92,76 @@ class LATRDMessage:
         try:
             attr_value = self._attrs[attr_name]
         except KeyError:
-            raise LATRDMessageException("Missing attribute " + attr_name) from None
+            raise TristanMessageException("Missing attribute " + attr_name) from None
 
         return attr_value
 
     @staticmethod
     def new_id():
-        LATRDMessage.msg_counter += 1
-        return LATRDMessage.msg_counter
+        TristanMessage.msg_counter += 1
+        return TristanMessage.msg_counter
 
     @staticmethod
     def parse_json(raw_msg):
-        msg = LATRDMessage(from_str=raw_msg)
-        if msg.msg_type == LATRDMessage.MSG_TYPE_GET:
+        msg = TristanMessage(from_str=raw_msg)
+        if msg.msg_type == TristanMessage.MSG_TYPE_GET:
             reply_msg = GetMessage(msg.msg_id, msg.params)
-        elif msg.msg_type == LATRDMessage.MSG_TYPE_PUT:
+        elif msg.msg_type == TristanMessage.MSG_TYPE_PUT:
             reply_msg = PutMessage(msg.msg_id, msg.params)
-        elif msg.msg_type == LATRDMessage.MSG_TYPE_POST:
+        elif msg.msg_type == TristanMessage.MSG_TYPE_POST:
             reply_msg = PostMessage(msg.msg_id, msg.params)
-        elif msg.msg_type == LATRDMessage.MSG_TYPE_RESPONSE:
+        elif msg.msg_type == TristanMessage.MSG_TYPE_RESPONSE:
             data = None
-            if msg.has_attribute(LATRDMessage.MSG_DATA):
-                data = msg.get_attribute(LATRDMessage.MSG_DATA)
+            if msg.has_attribute(TristanMessage.MSG_DATA):
+                data = msg.get_attribute(TristanMessage.MSG_DATA)
             resp_type = None
-            if msg.has_attribute(LATRDMessage.RESPONSE_TYPE):
-                resp_type = msg.get_attribute(LATRDMessage.RESPONSE_TYPE)
+            if msg.has_attribute(TristanMessage.RESPONSE_TYPE):
+                resp_type = msg.get_attribute(TristanMessage.RESPONSE_TYPE)
                 reply_msg = ResponseMessage(msg.msg_id, data, resp_type)
             else:
                 reply_msg = ResponseMessage(msg.msg_id, data)
         else:
-            raise LATRDMessageException(
+            raise TristanMessageException(
                 f"Cannot parse unknown message type: {msg.msg_type}"
             )
         return reply_msg
 
 
-class GetMessage(LATRDMessage):
+class GetMessage(TristanMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
-            msg_id = LATRDMessage.new_id()
-        super().__init__(msg_type=LATRDMessage.MSG_TYPE_GET, msg_id=msg_id)
+            msg_id = TristanMessage.new_id()
+        super().__init__(msg_type=TristanMessage.MSG_TYPE_GET, msg_id=msg_id)
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
 
-class PutMessage(LATRDMessage):
+class PutMessage(TristanMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
-            msg_id = LATRDMessage.new_id()
-        super().__init__(msg_type=LATRDMessage.MSG_TYPE_PUT, msg_id=msg_id)
+            msg_id = TristanMessage.new_id()
+        super().__init__(msg_type=TristanMessage.MSG_TYPE_PUT, msg_id=msg_id)
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
 
-class PostMessage(LATRDMessage):
+class PostMessage(TristanMessage):
     def __init__(self, msg_id=None, params=None):
         if not msg_id:
-            msg_id = LATRDMessage.new_id()
-        super().__init__(msg_type=LATRDMessage.MSG_TYPE_POST, msg_id=msg_id)
+            msg_id = TristanMessage.new_id()
+        super().__init__(msg_type=TristanMessage.MSG_TYPE_POST, msg_id=msg_id)
         if params:
             self._attrs[self.MSG_PARAMETERS] = params
 
 
-class ResponseMessage(LATRDMessage):
+class ResponseMessage(TristanMessage):
     RESPONSE_OK = 0
     RESPONSE_ERROR = 1
 
     def __init__(self, msg_id=None, data=None, response_type=RESPONSE_OK):
         if not msg_id:
-            msg_id = LATRDMessage.new_id()
-        super().__init__(msg_type=LATRDMessage.MSG_TYPE_RESPONSE, msg_id=msg_id)
+            msg_id = TristanMessage.new_id()
+        super().__init__(msg_type=TristanMessage.MSG_TYPE_RESPONSE, msg_id=msg_id)
         del self._attrs[self.MSG_PARAMETERS]
         self._attrs[self.RESPONSE_TYPE] = response_type
         if data:

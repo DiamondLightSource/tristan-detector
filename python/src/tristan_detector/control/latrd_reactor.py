@@ -4,13 +4,13 @@ import logging
 import zmq
 
 
-class LATRDReactorTimer:
+class TristanReactorTimer:
     last_timer_id = 0
 
     def __init__(self, delay_ms, times, callback):
         self._log = logging.getLogger(".".join([__name__, self.__class__.__name__]))
-        LATRDReactorTimer.last_timer_id += 1
-        self._timer_id = LATRDReactorTimer.last_timer_id
+        TristanReactorTimer.last_timer_id += 1
+        self._timer_id = TristanReactorTimer.last_timer_id
         self._delay_ms = delay_ms
         self._times = times
         self._callback = callback
@@ -29,7 +29,7 @@ class LATRDReactorTimer:
             self._when += self._delay_ms
 
     def has_fired(self):
-        return LATRDReactorTimer.clock_mono_ms() >= self._when
+        return TristanReactorTimer.clock_mono_ms() >= self._when
 
     def has_expired(self):
         return self._expired
@@ -45,7 +45,7 @@ class LATRDReactorTimer:
         return time_ms
 
 
-class LATRDReactor:
+class TristanReactor:
     def __init__(self):
         logging.basicConfig(format="%(asctime)-15s %(message)s")
         self._log = logging.getLogger(".".join([__name__, self.__class__.__name__]))
@@ -72,7 +72,7 @@ class LATRDReactor:
         self._needs_rebuild = True
 
     def register_timer(self, delay_ms, times, callback):
-        timer = LATRDReactorTimer(delay_ms, times, callback)
+        timer = TristanReactorTimer(delay_ms, times, callback)
         self._timers[timer.get_id()] = timer
         return timer.get_id()
 
@@ -99,7 +99,7 @@ class LATRDReactor:
                     if pollrc[sock] == zmq.POLLIN:
                         try:
                             # reply = self._channels[sock].recv()
-                            # msg = LATRDMessage.parse_json(reply)
+                            # msg = TristanMessage.parse_json(reply)
                             self._callbacks[sock]()
                         except Exception as e:
                             # TODO: How to handle an exception here
@@ -136,14 +136,14 @@ class LATRDReactor:
     def calculate_timeout(self):
         # Calculate shortest timeout up to one hour (!!), looping through
         # current timers to see which fires first
-        tickless = LATRDReactorTimer.clock_mono_ms() + (1000 * 3600)
+        tickless = TristanReactorTimer.clock_mono_ms() + (1000 * 3600)
         for timer in self._timers:
             if tickless > self._timers[timer].when():
                 tickless = self._timers[timer].when()
 
         # Calculate current timeout based on that, set to zero (don't wait) if
         # there is no timers pending
-        timeout = tickless - LATRDReactorTimer.clock_mono_ms()
+        timeout = tickless - TristanReactorTimer.clock_mono_ms()
         if timeout < 0:
             timeout = 0
         return timeout

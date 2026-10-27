@@ -1,6 +1,6 @@
 [
   {
-    "decoder_type": "LATRD",
+    "decoder_type": "TRISTAN",
     "decoder_path": "/odin/lib",
     "rx_ports": "61649",
     "decoder_config": {

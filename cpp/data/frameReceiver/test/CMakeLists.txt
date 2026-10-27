@@ -19,17 +19,17 @@ file(GLOB LIB_SOURCES ${FRAMERECEIVER_DIR}/src/*Lib.cpp)
 list(REMOVE_ITEM APP_SOURCES ${LIB_SOURCES})
 
 # Add test and project source files to executable
-add_executable(LATRDDecoderTest ${TEST_SOURCES} ${APP_SOURCES} ${MAIN_APP_SOURCES})
+add_executable(TristanDecoderTest ${TEST_SOURCES} ${APP_SOURCES} ${MAIN_APP_SOURCES})
 
 if ( ${CMAKE_SYSTEM_NAME} MATCHES Linux )
 # librt required for timing functions
 find_library(REALTIME_LIBRARY 
 		NAMES rt PATHS /usr/lib64)
-target_link_libraries( LATRDDecoderTest ${REALTIME_LIBRARY} )
+target_link_libraries( TristanDecoderTest ${REALTIME_LIBRARY} )
 endif()
 
 # Define libraries to link against
-target_link_libraries(LATRDDecoderTest 
+target_link_libraries(TristanDecoderTest 
 		${ODINDATA_LIBRARIES} 
     ${FRAMERECEIVER_LIBRARY}
 		${Boost_LIBRARIES} 

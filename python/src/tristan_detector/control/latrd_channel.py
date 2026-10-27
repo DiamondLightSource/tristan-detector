@@ -4,10 +4,10 @@ import zmq
 from zmq import ZMQError
 from zmq.utils.strtypes import cast_bytes
 
-from .latrd_message import LATRDMessage
+from .tristan_message import TristanMessage
 
 
-class LATRDChannelException(Exception):  # noqa: N818
+class TristanChannelException(Exception):  # noqa: N818
     def __init__(self, msg, errno=None):
         self.msg = msg
         self.errno = errno
@@ -16,7 +16,7 @@ class LATRDChannelException(Exception):  # noqa: N818
         return str(self.msg)
 
 
-class LATRDChannel:
+class TristanChannel:
     CHANNEL_HWM = 2
     CHANNEL_TYPE_PAIR = zmq.PAIR
     CHANNEL_TYPE_REQ = zmq.REQ
@@ -43,8 +43,7 @@ class LATRDChannel:
         if self.channel_type == self.CHANNEL_TYPE_DEALER:
             if identity is None:
                 identity = (
-                    f"{random.randrange(0x10000):04x}-"
-                    f"{random.randrange(0x10000):04x}"
+                    f"{random.randrange(0x10000):04x}-{random.randrange(0x10000):04x}"
                 )
             self.identity = identity
             self.socket.setsockopt(zmq.IDENTITY, cast_bytes(identity))  # pylint: disable=no-member
@@ -69,7 +68,7 @@ class LATRDChannel:
 
     def send(self, data):
         status = 0
-        if isinstance(data, LATRDMessage):
+        if isinstance(data, TristanMessage):
             data = data.encode()
         try:
             self.socket.send(data, flags=zmq.NOBLOCK)
@@ -81,7 +80,7 @@ class LATRDChannel:
     def send_multi(self, data):
         send_list = []
         for item in data:
-            if isinstance(item, LATRDMessage):
+            if isinstance(item, TristanMessage):
                 item = item.encode()
             send_list.append(item)
         self.socket.send_multipart(send_list)
@@ -98,4 +97,4 @@ class LATRDChannel:
 
     def subscribe(self, topic=b""):
 
-        self.socket.setsockopt(LATRDChannel.CHANNEL_TYPE_SUB, topic)
+        self.socket.setsockopt(TristanChannel.CHANNEL_TYPE_SUB, topic)

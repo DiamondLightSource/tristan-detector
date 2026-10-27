@@ -16,8 +16,8 @@ from dateutil.tz import tzlocal
 from odin.adapters.parameter_tree import ParameterTree
 from odin_data.control.odin_data_controller import OdinDataController
 
-from .latrd_channel import LATRDChannel
-from .latrd_message import GetMessage, LATRDMessage, PostMessage, PutMessage
+from .tristan_channel import TristanChannel
+from .tristan_message import GetMessage, PostMessage, PutMessage, TristanMessage
 
 logger = logging.getLogger(__name__)
 
@@ -193,7 +193,7 @@ class TristanDetector(OdinDataController):
         self._comms_lock = threading.RLock()
 
         # Create the connection to the hardware
-        self._detector = LATRDChannel(LATRDChannel.CHANNEL_TYPE_DEALER)
+        self._detector = TristanChannel(TristanChannel.CHANNEL_TYPE_DEALER)
         self._detector.connect(self._endpoint)
 
         # Start with the static/local fields
@@ -462,15 +462,15 @@ class TristanDetector(OdinDataController):
 
             if status > -1:
                 pollevts = self._detector.poll(self.DETECTOR_TIMEOUT)
-                if pollevts == LATRDChannel.POLLIN:
-                    reply = LATRDMessage.parse_json(self._detector.recv())
+                if pollevts == TristanChannel.POLLIN:
+                    reply = TristanMessage.parse_json(self._detector.recv())
 
                 # Continue attempting to get the correct reply until timeout
                 while reply and reply.msg_id != msg.msg_id:
                     reply = None
                     pollevts = self._detector.poll(self.DETECTOR_TIMEOUT)
-                    if pollevts == LATRDChannel.POLLIN:
-                        reply = LATRDMessage.parse_json(self._detector.recv())
+                    if pollevts == TristanChannel.POLLIN:
+                        reply = TristanMessage.parse_json(self._detector.recv())
 
         logger.debug("Reply: %s", reply)
         return reply
@@ -498,7 +498,7 @@ class TristanDetector(OdinDataController):
 
                         if reply is not None:
                             logger.debug("Raw reply: %s", reply)
-                            if LATRDMessage.MSG_TYPE_RESPONSE in reply.msg_type:
+                            if TristanMessage.MSG_TYPE_RESPONSE in reply.msg_type:
                                 data: dict = reply["data"]
                                 currently_connected = self._params.get(
                                     "status/connected"
@@ -673,7 +673,7 @@ class TristanDetector(OdinDataController):
 
                         if reply is not None:
                             logger.debug("Raw reply: %s", reply)
-                            if LATRDMessage.MSG_TYPE_RESPONSE in reply.msg_type:
+                            if TristanMessage.MSG_TYPE_RESPONSE in reply.msg_type:
                                 data = reply["data"]["config"]
                                 logger.debug("Reply data: %s", data)
                                 self.update_config(self._params, data)
