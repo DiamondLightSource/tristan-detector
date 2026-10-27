@@ -10,16 +10,6 @@ import threading
 import time
 
 from .event_simulator import TristanEventProducer
-from .latrd_channel import LATRDChannel
-from .latrd_message import (
-    GetMessage,
-    LATRDMessage,
-    LATRDMessageException,
-    PostMessage,
-    PutMessage,
-    ResponseMessage,
-)
-from .latrd_reactor import LATRDReactor
 from .tristan_adapter import (
     TriggerClockSourceType,
     TriggerInTerminationType,
@@ -29,9 +19,19 @@ from .tristan_adapter import (
     TriggerTimestampType,
     TriggerTZeroType,
 )
+from .tristan_channel import TristanChannel
+from .tristan_message import (
+    GetMessage,
+    PostMessage,
+    PutMessage,
+    ResponseMessage,
+    TristanMessage,
+    TristanMessageException,
+)
+from .tristan_reactor import TristanReactor
 
 
-class LATRDControlSimulator:
+class TristanControlSimulator:
     DETECTOR_1M = 1
     DETECTOR_2M = 2
     DETECTOR_10M = 10
@@ -43,7 +43,7 @@ class LATRDControlSimulator:
         self._ctrl_channel = None
         self._script_thread = None
         self._sensor = sensor
-        self._reactor = LATRDReactor()
+        self._reactor = TristanReactor()
         self._daq = TristanEventProducer(endpoints)
         self._daq.init(80000000)
         variant = "10M"
@@ -53,7 +53,7 @@ class LATRDControlSimulator:
             "x_max": [2068, 2068, 2068, 2068, 2068, 4212, 4212, 4212, 4212, 4212],
             "y_max": [514, 1146, 1778, 2410, 3042, 514, 1146, 1778, 2410, 3042],
         }
-        if sensor == LATRDControlSimulator.DETECTOR_1M:
+        if sensor == TristanControlSimulator.DETECTOR_1M:
             variant = "1M"
             module_dimensions = {
                 "x_min": [0],
@@ -61,7 +61,7 @@ class LATRDControlSimulator:
                 "x_max": [2068],
                 "y_max": [514],
             }
-        elif sensor == LATRDControlSimulator.DETECTOR_2M:
+        elif sensor == TristanControlSimulator.DETECTOR_2M:
             variant = "2M"
             module_dimensions = {
                 "x_min": [0, 0],
@@ -180,7 +180,7 @@ class LATRDControlSimulator:
         }
 
     def setup_control_channel(self, endpoint):
-        self._ctrl_channel = LATRDChannel(LATRDChannel.CHANNEL_TYPE_ROUTER)
+        self._ctrl_channel = TristanChannel(TristanChannel.CHANNEL_TYPE_ROUTER)
         self._ctrl_channel.bind(endpoint)
         self._reactor.register_channel(self._ctrl_channel, self.handle_ctrl_msg)
 
@@ -190,7 +190,7 @@ class LATRDControlSimulator:
 
     def handle_ctrl_msg(self):
         id = self._ctrl_channel.recv()
-        msg = LATRDMessage.parse_json(self._ctrl_channel.recv())
+        msg = TristanMessage.parse_json(self._ctrl_channel.recv())
 
         self._store["status"]["detector"]["udp_packets_sent"] = [
             self._daq._sent_packets  # noqa: SLF001
@@ -207,7 +207,7 @@ class LATRDControlSimulator:
             # self._log.debug("Received PostMessage, parsing...")
             self.parse_post_msg(msg, id)
         else:
-            raise LATRDMessageException("Unknown message type received")
+            raise TristanMessageException("Unknown message type received")
 
     def parse_get_msg(self, msg, send_id):
         # Check the parameter keys and retrieve the values from the store
@@ -323,7 +323,7 @@ def main():
         sensor = int("".join(filter(lambda i: i.isdigit(), args.sensor)))
     else:
         sensor = args.sensor
-    simulator = LATRDControlSimulator(sensor, eps)
+    simulator = TristanControlSimulator(sensor, eps)
     simulator.setup_control_channel(args.control)
     simulator.start_reactor()
 

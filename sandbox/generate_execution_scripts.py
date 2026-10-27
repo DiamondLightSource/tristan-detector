@@ -44,16 +44,16 @@ def generate_fp_json(out_dir, total, number):
         {
             "plugin": {
                 "load": {
-                    "index": "latrd",
-                    "name": "LATRDProcessPlugin",
-                    "library": "/odin/lib/libLATRDProcessPlugin.so",
+                    "index": "tristan",
+                    "name": "TristanProcessPlugin",
+                    "library": "/odin/lib/libTristanProcessPlugin.so",
                 }
             }
         },
-        {"plugin": {"connect": {"index": "latrd", "connection": "frame_receiver"}}},
-        {"plugin": {"connect": {"index": "hdf", "connection": "latrd"}}},
+        {"plugin": {"connect": {"index": "tristan", "connection": "frame_receiver"}}},
+        {"plugin": {"connect": {"index": "hdf", "connection": "tristan"}}},
         {
-            "latrd": {
+            "tristan": {
                 "process": {"number": total, "rank": number},
                 "sensor": {"width": 2048, "height": 512},
             }
@@ -95,10 +95,10 @@ def generate_fp_script(out_dir, total, number):
     ctrl_connection = 5004 + (number * 10)
     fp_json = os.path.join(out_dir, f"fp{number + 1}.json")
     script_string = (
-        '#!/bin/bash\n'
-        f'\n'
-        f'${{FRAMEPROCESSOR_BIN:-/odin/bin/frameProcessor}} '
-        f'--ctrl=tcp://0.0.0.0:{ctrl_connection} --json_file={fp_json} '
+        "#!/bin/bash\n"
+        f"\n"
+        f"${{FRAMEPROCESSOR_BIN:-/odin/bin/frameProcessor}} "
+        f"--ctrl=tcp://0.0.0.0:{ctrl_connection} --json_file={fp_json} "
         f'--logconfig=${{LOG4CXX_CONFIG:-$SCRIPT_DIR/log4cxx.xml}} "$@"\n\n'
     )
 
@@ -115,14 +115,14 @@ def generate_fr_script(out_dir, total, number):
     release_connection = 5002 + (number * 10)
     memory = 10485760000 / total
     script_string = (
-        '#!/bin/bash\n'
-        f'\n'
+        "#!/bin/bash\n"
+        f"\n"
         'BUFFER_NAME="FrameReceiverBuffer1"\n'
         'BUFFER_STRING="$USER$BUFFER_NAME"\n'
-        f'${{FRAMERECEIVER_BIN:-/odin/bin/frameReceiver}} '
-        f'--path ${{ODIN_PLUGINS:-/odin/lib}} --ctrl=tcp://*:{ctrl_connection} '
-        f'--port={port_number} --ready=tcp://*:{ready_connection} --release=tcp://*:{release_connection} '
-        f'-t LATRD --rxbuffer=300000000 --sharedbuf=$BUFFER_STRING -m {memory} '
+        f"${{FRAMERECEIVER_BIN:-/odin/bin/frameReceiver}} "
+        f"--path ${{ODIN_PLUGINS:-/odin/lib}} --ctrl=tcp://*:{ctrl_connection} "
+        f"--port={port_number} --ready=tcp://*:{ready_connection} --release=tcp://*:{release_connection} "
+        f"-t TRISTAN --rxbuffer=300000000 --sharedbuf=$BUFFER_STRING -m {memory} "
         f'--logconfig=${{LOG4CXX_CONFIG:-$SCRIPT_DIR/log4cxx.xml}} "$@"\n\n'
     )
     with open(os.path.join(out_dir, f"tristan_receiver_{number + 1}"), "w") as outfile:
@@ -152,7 +152,7 @@ def generate_odin_scripts(out_dir, total):
         "logging = debug\n"
         "\n"
         "[adapter.ctrl]\n"
-        "module = latrd.detector.tristan_control_adapter.TristanControlAdapter\n"
+        "module = tristan.detector.tristan_control_adapter.TristanControlAdapter\n"
         "endpoint = tcp://192.168.0.34:5000\n"
         "#endpoint = tcp://192.168.1.2:5000\n"
         "#endpoint = tcp://127.0.0.1:5100\n"
@@ -176,9 +176,9 @@ def generate_odin_scripts(out_dir, total):
     config_path = os.path.join(out_dir, "tristan_odin.cfg")
 
     script_string = (
-        f'export PYTHONPATH=${{ODIN_PLUGINS:-/odin/lib}}/python2.7/site-packages/latrd-0.1.0-py2.7.egg:\n'
-        f'${{ODIN_PYTHONPATH:-/odin/lib/python/site-packages}}\n'
-        f'${{ODIN_BIN:-/odin/bin/latrd_odin}} --config={config_path}\n\n'
+        f"export PYTHONPATH=${{ODIN_PLUGINS:-/odin/lib}}/python2.7/site-packages/tristan-0.1.0-py2.7.egg:\n"
+        f"${{ODIN_PYTHONPATH:-/odin/lib/python/site-packages}}\n"
+        f"${{ODIN_BIN:-/odin/bin/tristan_odin}} --config={config_path}\n\n"
     )
     with open(os.path.join(out_dir, f"odin_control_server_{total}"), "w") as outfile:
         outfile.write(script_string)

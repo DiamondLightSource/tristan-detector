@@ -10,8 +10,8 @@
     "plugin": {
       "load": {
         "index": "tristan",
-        "name": "LATRDProcessPlugin",
-        "library": "/odin/lib/libLATRDProcessPlugin.so"
+        "name": "TristanProcessPlugin",
+        "library": "/odin/lib/libTristanProcessPlugin.so"
       }
     }
   },

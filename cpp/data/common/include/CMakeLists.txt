@@ -1,5 +1,5 @@
 # Install header files into installation prefix
 
-SET(HEADERS LATRDDefinitions.h)
+SET(HEADERS TristanDefinitions.h)
 
 INSTALL(FILES ${HEADERS} DESTINATION include)

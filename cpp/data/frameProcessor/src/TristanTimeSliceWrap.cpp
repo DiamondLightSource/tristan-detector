@@ -1,0 +1,84 @@
+//
+// Created by gnx91527 on 18/09/18.
+//
+
+#include "TristanTimeSliceWrap.h"
+#include "DebugLevelLogger.h"
+
+namespace FrameProcessor {
+
+    TristanTimeSliceWrap::TristanTimeSliceWrap(uint32_t no_of_buffers) {
+        // Setup logging for the class
+        logger_ = Logger::getLogger("FP.TristanTimeSliceWrap");
+        LOG4CXX_DEBUG_LEVEL(2, logger_, "TristanTimeSliceWrap constructor.");
+
+        // Initialise the time slice buffers for this wrap
+        number_of_buffers_ = no_of_buffers;
+        for (uint32_t index = 0; index < number_of_buffers_; index++) {
+            boost::shared_ptr<TristanTimeSliceBuffer> ptr = boost::shared_ptr<TristanTimeSliceBuffer>(
+                    new TristanTimeSliceBuffer());
+            buffer_store_[index] = ptr;
+        }
+    }
+
+    TristanTimeSliceWrap::~TristanTimeSliceWrap() {
+        buffer_store_.clear();
+    }
+
+    void TristanTimeSliceWrap::add_job(uint32_t buffer_no, boost::shared_ptr<TristanProcessJob> job) {
+        // Check the buffer number supplied is valid
+        if (buffer_no < number_of_buffers_) {
+            // Add the job into the specified buffer
+            buffer_store_[buffer_no]->add_job(job);
+        } else {
+            // We cannot store this job, which is a serious error
+            // TODO: Throw the error
+            LOG4CXX_ERROR(logger_, "Job with invalid buffer number: " << buffer_no);
+        }
+    }
+
+    std::vector<boost::shared_ptr<TristanProcessJob> > TristanTimeSliceWrap::empty_all_buffers() {
+        std::vector<boost::shared_ptr<TristanProcessJob> > jobs;
+        for (uint32_t index = 0; index < number_of_buffers_; index++) {
+            std::vector<boost::shared_ptr<TristanProcessJob> > buffer_jobs = empty_buffer(index);
+            jobs.insert(jobs.end(), buffer_jobs.begin(), buffer_jobs.end());
+        }
+        return jobs;
+    }
+
+    std::vector<boost::shared_ptr<TristanProcessJob> > TristanTimeSliceWrap::empty_buffer(uint32_t buffer_number) {
+        // Return the processed jobs from the buffer
+        return buffer_store_[buffer_number]->empty();
+    }
+
+    std::vector<uint32_t> TristanTimeSliceWrap::get_all_event_data_counts()
+    {
+        std::vector<uint32_t> event_counts;
+        for (uint32_t index = 0; index < number_of_buffers_; index++) {
+            event_counts.push_back(get_event_data_counts(index));
+        }
+        return event_counts;
+    }
+
+    uint32_t TristanTimeSliceWrap::get_event_data_counts(uint32_t buffer_number)
+    {
+        return buffer_store_[buffer_number]->no_of_events();
+    }
+
+    std::string TristanTimeSliceWrap::report() {
+        // Print a full report of wrap object
+        std::stringstream ss;
+        ss << "\n==============================================\n"
+           << "***              Wrap Report              ***\n"
+           << "*** Number of buffers: " << number_of_buffers_ << "\n";
+        ss << "==============================================\n";
+        for (uint32_t index = 0; index < number_of_buffers_; index++) {
+            ss << "*** Buffer " << index;
+            ss << buffer_store_[index]->report();
+            ss << "\n----------------------------------------------\n";
+        }
+        ss << "==============================================";
+        return ss.str();
+    }
+
+}
