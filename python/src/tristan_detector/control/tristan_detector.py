@@ -9,6 +9,7 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime
 from typing import cast
 
@@ -20,6 +21,46 @@ from .tristan_channel import TristanChannel
 from .tristan_message import GetMessage, PostMessage, PutMessage, TristanMessage
 
 logger = logging.getLogger(__name__)
+
+
+def _lookup(store: dict, path: str):
+    """Return the value at a "/"-separated path in a nested dict, or None if absent"""
+    node = store
+    for key in path.split("/"):
+        if not isinstance(node, dict) or key not in node:
+            return None
+        node = node[key]
+    return node
+
+
+def _schema_branch(
+    store: Callable[[], dict],
+    prefix: str,
+    paths: list[str],
+    metadata: dict[str, list[str]] | None = None,
+) -> dict:
+    """Build a ParameterTree branch with a read-only leaf for each schema path
+
+    Each leaf looks its value up in the dict returned by ``store`` at read time, so
+    the branch reflects the latest detector reply without the tree being modified,
+    and the store itself may be replaced. Paths missing from the store read as None.
+
+    :param store: callable returning the nested dict holding the values
+    :param prefix: path of this branch within the store ("" for the store root)
+    :param paths: "/"-separated leaf paths relative to the branch
+    :param metadata: optional map of leaf path to its allowed values
+    """
+    metadata = metadata or {}
+    branch: dict = {}
+    for path in paths:
+        *parents, leaf = path.split("/")
+        node = branch
+        for parent in parents:
+            node = node.setdefault(parent, {})
+        store_path = f"{prefix}/{path}" if prefix else path
+        leaf_meta = {"allowed_values": metadata[path]} if path in metadata else {}
+        node[leaf] = (lambda p=store_path: _lookup(store(), p), leaf_meta)
+    return branch
 
 
 class TristanDetector(OdinDataController):
@@ -190,6 +231,11 @@ class TristanDetector(OdinDataController):
         self._username = getpass.getuser()
         self._comms_lock = threading.RLock()
 
+        # Latest status and config replies from the detector. The parameter tree
+        # reads from these on every GET; the update loop replaces them on each poll.
+        self._status: dict = {}
+        self._config: dict = {}
+
         # Create the connection to the hardware
         self._detector = TristanChannel(TristanChannel.CHANNEL_TYPE_DEALER)
         self._detector.connect(self._endpoint)
@@ -212,10 +258,14 @@ class TristanDetector(OdinDataController):
                 "error": (lambda: "", {}),
                 "connected": (lambda: False, {}),
                 "acquisition_complete": (lambda: True, {}),
-                "state": None,  # placeholder, filled by status loop
-                "detector": {},
+                "state": (lambda: _lookup(self._status, "state"), {}),
+                "detector": _schema_branch(
+                    lambda: self._status, "detector", self.DETECTOR_STATUS_FIELDS
+                ),
             },
-            self.STR_CONFIG: {},
+            self.STR_CONFIG: _schema_branch(
+                lambda: self._config, "", self.DETECTOR_CONFIG, self.DETECTOR_ENUMS
+            ),
             self.STR_COMMAND: {
                 "arm": (
                     lambda: 0,
@@ -257,33 +307,6 @@ class TristanDetector(OdinDataController):
             },
         }
 
-        # Walk the status response to fill the tree
-        def _build__params(node: dict, response_data: dict, path_prefix=""):
-            for key, value in response_data.items():
-                full_path = f"{path_prefix}/{key}" if path_prefix else key
-                if isinstance(value, dict):
-                    if key not in node:
-                        node[key] = {}
-                    _build__params(node[key], value, full_path)
-                else:
-                    metadata = {}
-                    if full_path in self.DETECTOR_ENUMS:
-                        metadata["allowed_values"] = self.DETECTOR_ENUMS[full_path]
-                    node[key] = (
-                        lambda v=value: self.get_value(v),
-                        metadata,
-                    )
-
-        status_reply = self.send_recv("status")
-        if status_reply:
-            _build__params(
-                _params["status"]["detector"], status_reply["status"]["detector"]
-            )
-
-        config_reply = self.send_recv("config")
-        if config_reply:
-            _build__params(_params["config"], config_reply["config"])
-
         self._params = ParameterTree(_params)
 
         # Start up the status loop
@@ -314,14 +337,14 @@ class TristanDetector(OdinDataController):
         if path in self.ADODIN_MAPPING:
             path = self.ADODIN_MAPPING[path]
 
+        # ParameterTree reserves "description" as a metadata field name, so without
+        # metadata it rejects this path (and omits the leaf from its parent). Serve it
+        # directly; with metadata the tree handles it normally.
+        if path == "status/detector/description" and not meta:
+            return {"description": _lookup(self._status, "detector/description")}
+
         # Return from parameter tree
         return self._params.get(path, with_metadata=meta)
-
-    def get_value(self, item):
-        # Check if the item has a value field. If it does then return it
-        if isinstance(item, dict) and "value" in item:
-            return item["value"]
-        return None
 
     def _send(self, cmd_type: str, cmd: str, value: str | int | float | dict | list):
         match cmd_type:

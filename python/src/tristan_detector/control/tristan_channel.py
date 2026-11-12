@@ -2,7 +2,6 @@ import random
 
 import zmq
 from zmq import ZMQError
-from zmq.utils.strtypes import cast_bytes
 
 from .tristan_message import TristanMessage
 
@@ -29,7 +28,7 @@ class TristanChannel:
 
     def __init__(self, channel_type, endpoint=None, context=None, identity=None):
         self.channel_type = channel_type
-        self.context = context or zmq.Context().instance()
+        self.context = context or zmq.Context.instance()
         self.socket = self.context.socket(channel_type)
 
         if endpoint:
@@ -46,7 +45,9 @@ class TristanChannel:
                     f"{random.randrange(0x10000):04x}-{random.randrange(0x10000):04x}"
                 )
             self.identity = identity
-            self.socket.setsockopt(zmq.IDENTITY, cast_bytes(identity))  # pylint: disable=no-member
+            if isinstance(identity, str):
+                identity = identity.encode()
+            self.socket.setsockopt(zmq.IDENTITY, identity)
 
     def bind(self, endpoint=None):
 
