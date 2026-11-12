@@ -171,7 +171,6 @@ class TristanDetector(OdinDataController):
     def __init__(
         self,
         endpoint: str,
-        api_version: str,
         firmware: str,
         udp_config_file: str,
         update_interval: float,
@@ -181,7 +180,6 @@ class TristanDetector(OdinDataController):
         """
 
         self._endpoint = endpoint or None
-        self._api_version = api_version
         self._firmware = firmware
         self._udp_config_file = udp_config_file
         self._update_interval = update_interval
@@ -293,6 +291,18 @@ class TristanDetector(OdinDataController):
         self._update_time = datetime.now()
         self._status_thread = threading.Thread(target=self.update_loop)
         self._status_thread.start()
+
+    def shutdown(self):
+        """Stop the status update thread and close the detector channel."""
+        self._status_running = False
+        # Allow for an in-progress poll cycle (two detector requests) to time out
+        self._status_thread.join(timeout=3 * self.DETECTOR_TIMEOUT / 1000)
+        if self._status_thread.is_alive():
+            # ZeroMQ sockets are not thread safe, so leave the channel open rather
+            # than closing it underneath a thread that may still be using it
+            logger.warning("Status update thread did not stop within timeout")
+        else:
+            self._detector.close()
 
     def get(self, path, meta=False):
         """Handle GET requests from the controller interface."""

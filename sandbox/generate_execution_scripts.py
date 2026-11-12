@@ -152,7 +152,7 @@ def generate_odin_scripts(out_dir, total):
         "logging = debug\n"
         "\n"
         "[adapter.ctrl]\n"
-        "module = tristan.detector.tristan_control_adapter.TristanControlAdapter\n"
+        "module = tristan_detector.control.tristan_adapter.TristanAdapter\n"
         "endpoint = tcp://192.168.0.34:5000\n"
         "#endpoint = tcp://192.168.1.2:5000\n"
         "#endpoint = tcp://127.0.0.1:5100\n"
