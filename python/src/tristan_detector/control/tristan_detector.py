@@ -15,7 +15,6 @@ from enum import Enum
 
 from dateutil.tz import tzlocal
 from odin.adapters.parameter_tree import ParameterTree
-from odin_data.control.odin_data_controller import OdinDataController
 
 from .tristan_channel import TristanChannel
 from .tristan_enums import (
@@ -128,14 +127,11 @@ class DetectorTimeoutError(Exception):
     """The detector did not reach an expected state in time"""
 
 
-class TristanDetector(OdinDataController):
+class TristanDetector:
     """
     TristanDetector class.
     """
 
-    STR_API = "api"
-    STR_DETECTOR = "detector"
-    STR_FW = "filewriter"
     STR_CONFIG = "config"
     STR_STATUS = "status"
     STR_COMMAND = "command"
@@ -194,10 +190,6 @@ class TristanDetector(OdinDataController):
         "ntrigger": int,
     }
 
-    CORE_STATUS_LIST = {
-        "manufacturer": "DLS/STFC",
-        "model": "Odin [Tristan]",
-    }
     # Status request sent to the detector each poll, as on main (known to work
     # with the hardware)
     STATUS_REQUEST = [
@@ -307,12 +299,6 @@ class TristanDetector(OdinDataController):
     # Config request sent to the detector each poll: every schema path
     CONFIG_REQUEST = _request_template(DETECTOR_CONFIG)
     DETECTOR_TIMEOUT = 1000
-    ERROR_NO_RESPONSE = "No response from client, check it is running"
-    ERROR_FAILED_TO_SEND = "Unable to successfully send request to client"
-    ERROR_FAILED_GET = "Unable to successfully complete the GET request"
-    ERROR_PUT_MISMATCH = (
-        "The size of parameter array does not match the number of clients"
-    )
 
     def __init__(
         self,
@@ -333,7 +319,6 @@ class TristanDetector(OdinDataController):
         # Reported as the module field; the owning adapter passes its own name
         self._module = module or type(self).__name__
         self._error = ""
-        self._armed = False
         self._start_time = datetime.now()
         self._up_time = ""
         self._username = getpass.getuser()
@@ -541,9 +526,7 @@ class TristanDetector(OdinDataController):
 
         return reply
 
-    # Returns the reply rather than None as OdinDataController.put does; that base
-    # implementation is not used
-    def put(self, path, value):  # pyright: ignore[reportIncompatibleMethodOverride]
+    def put(self, path, value):
         """Handle PUT requests from the controller interface.
 
         :return: ``{"reply": ...}`` holding the detector's reply as a JSON string,
@@ -662,8 +645,7 @@ class TristanDetector(OdinDataController):
             logger.info("Confirmed armed response")
             # Detector armed OK, now tell it to run
             # Send a run command
-            with self._comms_lock:
-                reply = self._send("post", "command", "run")
+            reply = self._send("post", "command", "run")
 
             counter = 0
             # Wait for the status to become running
@@ -680,11 +662,10 @@ class TristanDetector(OdinDataController):
 
             else:
                 logger.info("Confirmed running response")
-                with self._comms_lock:
-                    # Once the reply has been received, set the
-                    # acquisition status to active
-                    self._acquisition_complete = False
-                    logger.info("Acquisition confirmed, setting state to active")
+                # Once the reply has been received, set the acquisition status
+                # to active
+                self._acquisition_complete = False
+                logger.info("Acquisition confirmed, setting state to active")
             response["reply"] = None if reply is None else str(reply)
         return response
 
