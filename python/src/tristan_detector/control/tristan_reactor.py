@@ -46,6 +46,9 @@ class TristanReactorTimer:
 
 
 class TristanReactor:
+    # Longest time a poll blocks, so that stop() takes effect promptly
+    MAX_POLL_TIMEOUT_MS = 100
+
     def __init__(self):
         logging.basicConfig(format="%(asctime)-15s %(message)s")
         self._log = logging.getLogger(".".join([__name__, self.__class__.__name__]))
@@ -70,6 +73,10 @@ class TristanReactor:
         self._channels.pop(channel.socket)
         # Signal a rebuild is required
         self._needs_rebuild = True
+
+    def stop(self):
+        """Ask the reactor loop to exit; safe to call from another thread"""
+        self._terminate_reactor = True
 
     def register_timer(self, delay_ms, times, callback):
         timer = TristanReactorTimer(delay_ms, times, callback)
@@ -134,9 +141,9 @@ class TristanReactor:
         self._needs_rebuild = False
 
     def calculate_timeout(self):
-        # Calculate shortest timeout up to one hour (!!), looping through
+        # Calculate shortest timeout up to MAX_POLL_TIMEOUT_MS, looping through
         # current timers to see which fires first
-        tickless = TristanReactorTimer.clock_mono_ms() + (1000 * 3600)
+        tickless = TristanReactorTimer.clock_mono_ms() + self.MAX_POLL_TIMEOUT_MS
         for timer in self._timers:
             if tickless > self._timers[timer].when():
                 tickless = self._timers[timer].when()

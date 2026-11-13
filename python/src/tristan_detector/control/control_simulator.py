@@ -35,8 +35,18 @@ class TristanControlSimulator:
     DETECTOR_1M = 1
     DETECTOR_2M = 2
     DETECTOR_10M = 10
+    DEFAULT_NUM_EVENTS = 80_000_000
 
-    def __init__(self, sensor=DETECTOR_1M, endpoints=None):
+    def __init__(
+        self, sensor=DETECTOR_1M, endpoints=None, num_events=DEFAULT_NUM_EVENTS
+    ):
+        """
+        :param sensor: number of sensor modules (1, 2 or 10)
+        :param endpoints: list of (ip, port) data endpoints to send packets to
+        :param num_events: number of events to pre-generate for data sending; this
+            dominates start-up time, so use 0 when only the control interface is
+            needed
+        """
         logging.basicConfig(format="%(asctime)-15s %(message)s")
         self._log = logging.getLogger(".".join([__name__, self.__class__.__name__]))
         self._log.setLevel(logging.DEBUG)
@@ -45,7 +55,7 @@ class TristanControlSimulator:
         self._sensor = sensor
         self._reactor = TristanReactor()
         self._daq = TristanEventProducer(endpoints)
-        self._daq.init(80000000)
+        self._daq.init(num_events)
         variant = "10M"
         module_dimensions = {
             "x_min": [0, 0, 0, 0, 0, 2144, 2144, 2144, 2144, 2144],
@@ -188,6 +198,10 @@ class TristanControlSimulator:
         self._log.debug("Starting reactor...")
         self._reactor.run()
 
+    def stop_reactor(self):
+        """Stop a reactor started with start_reactor, from another thread"""
+        self._reactor.stop()
+
     def handle_ctrl_msg(self):
         id = self._ctrl_channel.recv()
         msg = TristanMessage.parse_json(self._ctrl_channel.recv())
@@ -297,6 +311,14 @@ def options():
     parser.add_argument(
         "-m", "--sensor", default=1, help="Sensor module count (1 - 10)"
     )
+    parser.add_argument(
+        "-n",
+        "--num-events",
+        type=int,
+        default=TristanControlSimulator.DEFAULT_NUM_EVENTS,
+        help="Number of events to pre-generate for data sending; use 0 for a "
+        "control-only simulator that starts instantly",
+    )
     args = parser.parse_args()
     return args
 
@@ -323,7 +345,7 @@ def main():
         sensor = int("".join(filter(lambda i: i.isdigit(), args.sensor)))
     else:
         sensor = args.sensor
-    simulator = TristanControlSimulator(sensor, eps)
+    simulator = TristanControlSimulator(sensor, eps, args.num_events)
     simulator.setup_control_channel(args.control)
     simulator.start_reactor()
 
