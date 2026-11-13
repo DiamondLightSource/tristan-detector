@@ -11,6 +11,7 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import datetime
+from enum import Enum
 from typing import cast
 
 from dateutil.tz import tzlocal
@@ -18,9 +19,39 @@ from odin.adapters.parameter_tree import ParameterTree
 from odin_data.control.odin_data_controller import OdinDataController
 
 from .tristan_channel import TristanChannel
+from .tristan_enums import (
+    ModeType,
+    ProfileType,
+    TriggerClockSourceType,
+    TriggerInTerminationType,
+    TriggerInType,
+    TriggerOutTerminationType,
+    TriggerOutType,
+    TriggerTimestampType,
+    TriggerTZeroType,
+)
 from .tristan_message import GetMessage, PostMessage, PutMessage, TristanMessage
 
 logger = logging.getLogger(__name__)
+
+# Enum type of each enumerated config parameter (paths relative to config/)
+CONFIG_ENUM_TYPES: dict[str, type[Enum]] = {
+    "mode": ModeType,
+    "profile": ProfileType,
+    "trigger/start": TriggerInType,
+    "trigger/stop": TriggerInType,
+    "trigger/timestamp/fem": TriggerTimestampType,
+    "trigger/timestamp/lvds": TriggerTimestampType,
+    "trigger/timestamp/sync": TriggerTimestampType,
+    "trigger/timestamp/ttl": TriggerTimestampType,
+    "trigger/timestamp/tzero": TriggerTimestampType,
+    "trigger/ttl_in_term": TriggerInTerminationType,
+    "trigger/ttl_out_term": TriggerOutTerminationType,
+    "trigger/primary_clock_source": TriggerClockSourceType,
+    "trigger/tzero": TriggerTZeroType,
+    "trigger/ttl_out": TriggerOutType,
+    "trigger/lvds_out": TriggerOutType,
+}
 
 
 def _lookup(store: dict, path: str):
@@ -112,54 +143,10 @@ class TristanDetector(OdinDataController):
         "trigger/tzero",
     ]
     STATUS_PATHS = ["status", "config", "command"]
+    # Allowed values of each enumerated config parameter, from tristan_enums
     DETECTOR_ENUMS = {
-        "mode": ["time_energy", "time_only", "count"],
-        "profile": ["standard", "fast", "energy", "user", "current"],
-        "trigger/start": [
-            "internal",
-            "external_re",
-            "external_fe",
-            "external_lvds_re",
-            "external_lvds_fe",
-        ],
-        "trigger/stop": [
-            "internal",
-            "external_re",
-            "external_fe",
-            "external_lvds_re",
-            "external_lvds_fe",
-        ],
-        "trigger/timestamp/fem": ["none", "re", "fe", "both"],
-        "trigger/timestamp/lvds": ["none", "re", "fe", "both"],
-        "trigger/timestamp/sync": ["none", "re", "fe", "both"],
-        "trigger/timestamp/ttl": ["none", "re", "fe", "both"],
-        "trigger/timestamp/tzero": ["none", "re", "fe", "both"],
-        "trigger/ttl_in_term": ["term_50ohm", "hi_z"],
-        "trigger/ttl_out_term": ["term_50ohm", "lo_z"],
-        "trigger/primary_clock_source": ["internal", "external"],
-        "trigger/tzero": ["internal", "external", "off"],
-        "trigger/ttl_out": [
-            "follow_shutter",
-            "follow_shutter_read",
-            "one_per_acq_burst",
-            "busy",
-            "counter_select",
-            "tzero",
-            "sync",
-            "lvds",
-            "ttl",
-        ],
-        "trigger/lvds_out": [
-            "follow_shutter",
-            "follow_shutter_read",
-            "one_per_acq_burst",
-            "busy",
-            "counter_select",
-            "tzero",
-            "sync",
-            "lvds",
-            "ttl",
-        ],
+        path: [e.name for e in enum_type]
+        for path, enum_type in CONFIG_ENUM_TYPES.items()
     }
 
     CORE_STATUS_LIST = {
