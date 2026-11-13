@@ -21,11 +21,6 @@
         ]
     },
     "python.analysis.autoImportCompletions": true,
-    "python-envs.pythonProjects": [
-        {
-            "path": ".",
-            "envManager": "ms-python.python:system",
-            "packageManager": "ms-python.python:pip"
-        }
-    ],
+    // Use the image's venv, which has odin-control and odin-data installed
+    "python.defaultInterpreterPath": "/venv/bin/python"
 }

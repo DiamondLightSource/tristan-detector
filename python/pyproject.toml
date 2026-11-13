@@ -11,7 +11,16 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 description = "Tristan detector for odin control"
-dependencies = ["odin_control~=2.1.0", "tornado>=4.3", "python-dateutil"]
+dependencies = [
+    # Match the odin-control commit odin-data is built against (odin-control 2.x
+    # renames the `odin` package to `odin_control`, which odin-data does not support
+    # yet). odin-data itself is provided by the odin-data-build image and is
+    # deliberately not listed: its installed metadata has an unpinned odin-control git
+    # requirement that pip would resolve to 2.x.
+    "odin-control @ git+https://github.com/odin-detector/odin-control@1cf475b60abf66666d31c7e74b9d19540c2ea6c3",
+    "tornado>=4.3",
+    "python-dateutil",
+]
 dynamic = ["version"]
 license.file = "LICENSE"
 readme = "README.md"
