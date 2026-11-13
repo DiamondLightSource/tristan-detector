@@ -459,3 +459,9 @@ def test_unknown_paths_outside_status_are_errors(detector):
         detector.get("config/not_in_schema")
     with pytest.raises(ParameterTreeError):
         detector.get("status/not/sent", meta=True)
+
+
+def test_other_paths_outside_config_read_as_none(detector):
+    # As on main, e.g. GETs of command paths
+    assert detector.get("command/arm") == {"value": None}
+    assert detector.get("command/start_acquisition") == {"value": None}

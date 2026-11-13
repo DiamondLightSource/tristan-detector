@@ -134,7 +134,6 @@ class TristanDetector:
 
     STR_CONFIG = "config"
     STR_STATUS = "status"
-    STR_COMMAND = "command"
 
     TEMP_ASICS_COUNT = 16
     TEMP_PCB_COUNT = 2
@@ -316,10 +315,14 @@ class TristanDetector:
         module: str | None = None,
     ):
         """
-        Initialise the TristanDetector object.
+        :param endpoint: ZeroMQ endpoint of the detector control interface
+        :param firmware: expected detector software version, for version_check
+        :param udp_config_file: JSON file of UDP config sent on each connection
+        :param update_interval: seconds between status and config polls
+        :param module: name reported as the module field
         """
 
-        self._endpoint = endpoint or None
+        self._endpoint = endpoint
         self._firmware = firmware
         self._udp_config_file = udp_config_file
         self._update_interval = update_interval
@@ -360,45 +363,6 @@ class TristanDetector:
             self.STR_CONFIG: _schema_branch(
                 lambda: self._config, "", self.DETECTOR_CONFIG, self.DETECTOR_ENUMS
             ),
-            self.STR_COMMAND: {
-                "arm": (
-                    lambda: 0,
-                    lambda v: self.send_recv(PostMessage(params={"command": "arm"})),
-                    {},
-                ),
-                "run": (
-                    lambda: 0,
-                    lambda v: self.send_recv(PostMessage(params={"command": "run"})),
-                    {},
-                ),
-                "stop": (
-                    lambda: 0,
-                    lambda v: self.send_recv(PostMessage(params={"command": "stop"})),
-                    {},
-                ),
-                "trigger": (
-                    lambda: 0,
-                    lambda v: self.send_recv(
-                        PostMessage(params={"command": "trigger"})
-                    ),
-                    {},
-                ),
-                "cancel": (
-                    lambda: 0,
-                    lambda v: self.send_recv(PostMessage(params={"command": "cancel"})),
-                    {},
-                ),
-                "abort": (
-                    lambda: 0,
-                    lambda v: self.send_recv(PostMessage(params={"command": "abort"})),
-                    {},
-                ),
-                "disarm": (
-                    lambda: 0,
-                    lambda v: self.send_recv(PostMessage(params={"command": "disarm"})),
-                    {},
-                ),
-            },
         }
 
         self._params = ParameterTree(_params)
@@ -511,11 +475,14 @@ class TristanDetector:
             try:
                 result = self._params.get(path, with_metadata=meta)
             except ParameterTreeError:
-                # As on main, any other status path is looked up in the latest
-                # status reply, reading as None if the detector did not send it
-                if meta or not path.startswith(f"{self.STR_STATUS}/"):
+                # As on main, other status paths are looked up in the latest status
+                # reply, reading as None if the detector did not send them; any
+                # other path outside config (e.g. command/arm) reads as None
+                if meta or path.split("/")[0] == self.STR_CONFIG:
                     raise
                 status_path = path.removeprefix(f"{self.STR_STATUS}/")
+                if status_path == path:
+                    return {"value": None}
                 return {"value": _lookup(self._status, status_path)}
             assert isinstance(result, dict)
 
@@ -642,81 +609,59 @@ class TristanDetector:
                 )
 
     def _arm_then_run(self):
-        response = {}
+        """Arm the detector, then run it, waiting for each state as main did
 
-        # Send an arm command
+        :raises DetectorTimeoutError: if the detector does not reach a state in time
+        """
         logger.info("Starting acquisition sequence")
-        reply = self._send("post", "command", "arm")
+        self._send("post", "command", "arm")
+        self._wait_for_state("armed")
 
-        counter = 0
-        # Wait for the status to become armed
-        logger.info("Arm command sent, waiting for armed response")
-        while _lookup(self._status, "state") != "armed" and counter < 50:
-            time.sleep(0.2)
-            counter += 1
+        reply = self._send("post", "command", "run")
+        self._wait_for_state("running")
 
-        # Check for a timeout and if there is raise an error
-        if _lookup(self._status, "state") != "armed":
-            self.set_error("Time out waiting for detector armed state")
-            raise DetectorTimeoutError("Time out waiting for detector armed state")
-        else:
-            logger.info("Confirmed armed response")
-            # Detector armed OK, now tell it to run
-            # Send a run command
-            reply = self._send("post", "command", "run")
+        self._acquisition_complete = False
+        logger.info("Acquisition confirmed, setting state to active")
+        return {"reply": None if reply is None else str(reply)}
 
-            counter = 0
-            # Wait for the status to become running
-            logger.info("Run command sent, waiting for running response")
-            while _lookup(self._status, "state") != "running" and counter < 50:
-                time.sleep(0.2)
-                counter += 1
-            # Check for a timeout and if there is raise an error
-            if _lookup(self._status, "state") != "running":
-                self.set_error("Time out waiting for detector running state")
-                raise DetectorTimeoutError(
-                    "Time out waiting for detector running state"
-                )
+    def _wait_for_state(self, state: str, attempts: int = 50, interval: float = 0.2):
+        """Wait for the polled detector state to become ``state``
 
-            else:
-                logger.info("Confirmed running response")
-                # Once the reply has been received, set the acquisition status
-                # to active
-                self._acquisition_complete = False
-                logger.info("Acquisition confirmed, setting state to active")
-            response["reply"] = None if reply is None else str(reply)
-        return response
+        :raises DetectorTimeoutError: if it does not within ``attempts * interval``
+        """
+        logger.info("Waiting for detector %s state", state)
+        for _ in range(attempts):
+            if _lookup(self._status, "state") == state:
+                logger.info("Confirmed %s state", state)
+                return
+            time.sleep(interval)
+        if _lookup(self._status, "state") == state:
+            return
+        message = f"Time out waiting for detector {state} state"
+        self.set_error(message)
+        raise DetectorTimeoutError(message)
 
     def send_udp_config(self):
-        """
-        Send the specified udp configuration to the detector
-        :param self:
-        :return:
-        """
-        # Load the spcified file into a JSON object
-        logger.info(f"Loading UDP configuration from file {self._udp_config_file}")
+        """Send the UDP configuration from the udp_file option to the detector"""
+        logger.info("Loading UDP configuration from file %s", self._udp_config_file)
         try:
             with open(self._udp_config_file) as config_file:
                 udp_config = json.load(config_file)
         except OSError as io_error:
-            logger.error(f"Failed to open UDP configuration file: {io_error}")
             self.set_error(f"Failed to open UDP configuration file: {io_error}")
             return
         except ValueError as value_error:
-            logger.error(f"Failed to parse UDP json config: {value_error}")
             self.set_error(f"Failed to parse UDP json config: {value_error}")
             return
 
-        logger.info(f"Downloading UDP configuration: {udp_config}")
+        logger.info("Downloading UDP configuration: %s", udp_config)
         reply = self._send("put", "config", udp_config)
-        logger.info(f"Reply from message: {reply}")
+        logger.info("Reply from message: %s", reply)
 
     def send_recv(self, msg):
-        """
-        Send a message and wait for the response
-        :param self:
-        :param msg:
-        :return:
+        """Send a message and wait for the reply with the same msg_id
+
+        :return: the reply, or None if the detector did not reply in time
         """
         logger.debug("Message Request: %s", msg)
         reply = None
