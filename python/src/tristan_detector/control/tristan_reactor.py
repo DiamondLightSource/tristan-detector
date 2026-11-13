@@ -140,7 +140,7 @@ class TristanReactor:
 
         self._needs_rebuild = False
 
-    def calculate_timeout(self):
+    def calculate_timeout(self) -> int:
         # Calculate shortest timeout up to MAX_POLL_TIMEOUT_MS, looping through
         # current timers to see which fires first
         tickless = TristanReactorTimer.clock_mono_ms() + self.MAX_POLL_TIMEOUT_MS
@@ -153,4 +153,4 @@ class TristanReactor:
         timeout = tickless - TristanReactorTimer.clock_mono_ms()
         if timeout < 0:
             timeout = 0
-        return timeout
+        return int(timeout)

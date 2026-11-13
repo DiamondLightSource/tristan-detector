@@ -190,6 +190,13 @@ class TristanControlSimulator:
             },
         }
 
+    @property
+    def ctrl_channel(self) -> TristanChannel:
+        """The control channel; setup_control_channel must have been called"""
+        if self._ctrl_channel is None:
+            raise RuntimeError("Control channel not set up")
+        return self._ctrl_channel
+
     def setup_control_channel(self, endpoint):
         self._ctrl_channel = TristanChannel(TristanChannel.CHANNEL_TYPE_ROUTER)
         self._ctrl_channel.bind(endpoint)
@@ -204,8 +211,8 @@ class TristanControlSimulator:
         self._reactor.stop()
 
     def handle_ctrl_msg(self):
-        id = self._ctrl_channel.recv()
-        msg = TristanMessage.parse_json(self._ctrl_channel.recv())
+        id = self.ctrl_channel.recv()
+        msg = TristanMessage.parse_json(self.ctrl_channel.recv())
 
         self._store["status"]["detector"]["udp_packets_sent"] = [
             self._daq._sent_packets  # noqa: SLF001
@@ -230,7 +237,7 @@ class TristanControlSimulator:
         self.read_parameters(self._store, msg.params, values)
         # self._log.debug("Return value object: %s", values)
         reply = ResponseMessage(msg.msg_id, values, ResponseMessage.RESPONSE_OK)
-        self._ctrl_channel.send_multi([send_id, reply])
+        self.ctrl_channel.send_multi([send_id, reply])
 
     def parse_put_msg(self, msg, send_id):
         # Retrieve the parameters and merge them with the store
@@ -240,7 +247,7 @@ class TristanControlSimulator:
             self.apply_parameters(self._store, key, params[key])
         self._log.debug("Updated parameter Store: %s", self._store)
         reply = ResponseMessage(msg.msg_id)
-        self._ctrl_channel.send_multi([send_id, reply])
+        self.ctrl_channel.send_multi([send_id, reply])
 
     def parse_post_msg(self, msg, send_id):
         # Nothing to do here, just wait two seconds before replying
@@ -263,7 +270,7 @@ class TristanControlSimulator:
                 self._log.error("Time Zero command has been issued")
 
         reply = ResponseMessage(msg.msg_id)
-        self._ctrl_channel.send_multi([send_id, reply])
+        self.ctrl_channel.send_multi([send_id, reply])
 
     def execute_arm(self):
         time.sleep(1.0)

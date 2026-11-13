@@ -25,10 +25,11 @@ class TristanDefinitions:
 
 
 class TristanData:
-    WORD_INDEX = 0
-    TIMESTAMP = 0
-    TIME_SLICE_NUMBER = 0
-    PACKET_NUMBER = 0
+    # Counters shared by all generated packets
+    WORD_INDEX: int = 0
+    TIMESTAMP: int = 0
+    TIME_SLICE_NUMBER: int = 0
+    PACKET_NUMBER: int = 0
 
 
 class TristanTimestampWord:
@@ -153,25 +154,6 @@ class Range(argparse.Action):
         setattr(namespace, self.dest, value)
 
 
-class CsvAction(argparse.Action):
-    """
-    Comma separated list of values action for argument parser.
-    """
-
-    def __init__(self, val_type=None, *args, **kwargs):
-        self.val_type = val_type
-        super().__init__(*args, **kwargs)
-
-    def __call__(self, parser, namespace, value, option_string=None):
-        item_list = []
-        try:
-            for item_str in value.split(","):
-                item_list.append(self.val_type(item_str))
-        except ValueError as e:
-            raise argparse.ArgumentError(self, e) from e
-        setattr(namespace, self.dest, item_list)
-
-
 class TristanProducerDefaults:
     """
     Holds default values for frame producer parameters.
@@ -207,7 +189,7 @@ class TristanEventProducer:
         parsing command-line options.
         """
         # IDLE packet record
-        self._idle_packet = None
+        self._idle_packet = b""  # created by create_packets
 
         # Create an empty list for packet storage
         self._packets = []
@@ -258,8 +240,7 @@ class TristanEventProducer:
     def running(self):
         if self._sent_packets != self._last_log:
             logging.info(
-                f"PACKETS SENT: {self._sent_packets}  "
-                f"TO SEND: {self._packets_to_send}"
+                f"PACKETS SENT: {self._sent_packets}  TO SEND: {self._packets_to_send}"
             )
             self._last_log = self._sent_packets
         return self._sent_packets != self._packets_to_send

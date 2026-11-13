@@ -517,6 +517,7 @@ class TristanDetector(OdinDataController):
             result = {"description": _lookup(self._status, "detector/description")}
         else:
             result = self._params.get(path, with_metadata=meta)
+            assert isinstance(result, dict)
 
         # As on main (and as the web UI expects), status and config values are
         # returned as {"value": v}; top-level fields keep their name as the key
@@ -540,7 +541,9 @@ class TristanDetector(OdinDataController):
 
         return reply
 
-    def put(self, path, value):
+    # Returns the reply rather than None as OdinDataController.put does; that base
+    # implementation is not used
+    def put(self, path, value):  # pyright: ignore[reportIncompatibleMethodOverride]
         """Handle PUT requests from the controller interface.
 
         :return: ``{"reply": ...}`` holding the detector's reply as a JSON string,

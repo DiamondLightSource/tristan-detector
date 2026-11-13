@@ -58,6 +58,7 @@ def test_options_are_passed_to_detector(monkeypatch):
         udp_file="/tmp/udp.json",
         update_interval="2",
     )
+    assert isinstance(adapter._controller, FakeDetector)
     assert adapter._controller.args == (
         "tcp://127.0.0.1:5000",
         "1.0.0",
