@@ -160,6 +160,7 @@ class TristanControlSimulator:
                 "exposure": 0.0,
                 "gap": 0.0,
                 "repeat_interval": 0.0,
+                "readout_time": 0.0,
                 "frames": 0,
                 "frames_per_trigger": 0,
                 "ntrigger": 0,

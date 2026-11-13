@@ -12,7 +12,6 @@ import time
 from collections.abc import Callable
 from datetime import datetime
 from enum import Enum
-from typing import cast
 
 from dateutil.tz import tzlocal
 from odin.adapters.parameter_tree import ParameterTree
@@ -30,7 +29,13 @@ from .tristan_enums import (
     TriggerTimestampType,
     TriggerTZeroType,
 )
-from .tristan_message import GetMessage, PostMessage, PutMessage, TristanMessage
+from .tristan_message import (
+    GetMessage,
+    PostMessage,
+    PutMessage,
+    ResponseMessage,
+    TristanMessage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +99,31 @@ def _schema_branch(
     return branch
 
 
+def _request_template(paths: list[str]) -> dict:
+    """Build a GET request template, with a None leaf for each "/"-separated path"""
+    template: dict = {}
+    for path in paths:
+        *parents, leaf = path.split("/")
+        node = template
+        for parent in parents:
+            node = node.setdefault(parent, {})
+        node[leaf] = None
+    return template
+
+
+def _first(value):
+    """The first element of a list value; other values are returned unchanged"""
+    return value[0] if isinstance(value, list) and value else value
+
+
+def _column(value, index: int):
+    """Element ``index`` of each per-module list in a 2D list value, or None"""
+    try:
+        return [module[index] for module in value]
+    except (TypeError, IndexError, KeyError):
+        return None
+
+
 class TristanDetector(OdinDataController):
     """
     TristanDetector class.
@@ -153,8 +183,50 @@ class TristanDetector(OdinDataController):
         "manufacturer": "DLS/STFC",
         "model": "Odin [Tristan]",
     }
-    DETECTOR_STATUS = ["state", "error"]
+    # Status request sent to the detector each poll, as on main (known to work
+    # with the hardware)
+    STATUS_REQUEST = [
+        {
+            "state": None,
+            "detector": {
+                "description": None,
+                "detector_type": None,
+                "serial_number": None,
+                "module_dimensions": {
+                    "x_min": [None],
+                    "y_min": [None],
+                    "x_max": [None],
+                    "y_max": [None],
+                },
+                "software_version": None,
+                "software_build": None,
+                "sensor_material": None,
+                "sensor_thickness": None,
+                "x_pixel_size": None,
+                "y_pixel_size": None,
+                "x_pixels_in_detector": None,
+                "y_pixels_in_detector": None,
+                "tick_ps": None,
+                "tick_hz": None,
+                "timeslice_number": None,
+                "timing_warning": None,
+                "timing_error": None,
+                "udp_packets_sent": None,
+                "data_overrun": None,
+                "frames_acquired": None,
+                "shutteropen": None,
+                "acquisition_busy": None,
+                "shutterbusy": None,
+                "fpga_busy": None,
+                "loopaction": None,
+                "crw": None,
+            },
+        }
+    ]
+    # Fields of status/detector passed through from the detector reply.
+    # udp_packets_sent, bytes and version_check are derived (see __init__).
     DETECTOR_STATUS_FIELDS = [
+        "acquisition_busy",
         "crw",
         "data_overrun",
         "description",
@@ -178,7 +250,6 @@ class TristanDetector(OdinDataController):
         "timeslice_number",
         "timing_error",
         "timing_warning",
-        "udp_packets_sent",
         "x_max",
         "x_min",
         "x_pixel_size",
@@ -188,6 +259,38 @@ class TristanDetector(OdinDataController):
         "y_pixel_size",
         "y_pixels_in_detector",
     ]
+    # Other status fields passed through from the detector reply (paths relative
+    # to status/). clock/dpll_* and the split sensor readings are derived.
+    OTHER_STATUS_FIELDS = [
+        "housekeeping/current_sense",
+        "housekeeping/fan_alert",
+        "housekeeping/fan_control_temp",
+        "housekeeping/fem_power_enabled",
+        "housekeeping/output_alert",
+        "housekeeping/psu_temp",
+        "housekeeping/psu_temp_alert",
+        "housekeeping/pwm",
+        "housekeeping/remote_temp",
+        "housekeeping/standby",
+        "housekeeping/tacho",
+        "housekeeping/voltage_sense",
+        "clock/clock_freq",
+        "sensor/current",
+        "sensor/humidity",
+        "sensor/temp_asics",
+        "sensor/temp_pcb",
+        "sensor/voltage",
+        "fem/temp",
+    ]
+    # Per-module 2D sensor readings split into one list per channel, as
+    # status/sensor/<name>_<channel>
+    SENSOR_CHANNELS = {
+        "temp_asics": TEMP_ASICS_COUNT,
+        "temp_pcb": TEMP_PCB_COUNT,
+        "humidity": HUMIDITY_COUNT,
+    }
+    # Config request sent to the detector each poll: every schema path
+    CONFIG_REQUEST = _request_template(DETECTOR_CONFIG)
     DETECTOR_TIMEOUT = 1000
     ERROR_NO_RESPONSE = "No response from client, check it is running"
     ERROR_FAILED_TO_SEND = "Unable to successfully send request to client"
@@ -222,6 +325,9 @@ class TristanDetector(OdinDataController):
         # reads from these on every GET; the update loop replaces them on each poll.
         self._status: dict = {}
         self._config: dict = {}
+        # Local state maintained by the update loop
+        self._connected = False
+        self._acquisition_complete = True
 
         # Create the connection to the hardware
         self._detector = TristanChannel(TristanChannel.CHANNEL_TYPE_DEALER)
@@ -239,17 +345,7 @@ class TristanDetector(OdinDataController):
             "firmware": (lambda: self._firmware, {}),
             "udp_file": (lambda: self._udp_config_file, {}),
             "update_interval": (lambda: self._update_interval, {}),
-            self.STR_STATUS: {
-                "manufacturer": (lambda: "DLS/STFC", {}),
-                "model": (lambda: "Odin [Tristan]", {}),
-                "error": (lambda: "", {}),
-                "connected": (lambda: False, {}),
-                "acquisition_complete": (lambda: True, {}),
-                "state": (lambda: _lookup(self._status, "state"), {}),
-                "detector": _schema_branch(
-                    lambda: self._status, "detector", self.DETECTOR_STATUS_FIELDS
-                ),
-            },
+            self.STR_STATUS: self._build_status_tree(),
             self.STR_CONFIG: _schema_branch(
                 lambda: self._config, "", self.DETECTOR_CONFIG, self.DETECTOR_ENUMS
             ),
@@ -297,14 +393,76 @@ class TristanDetector(OdinDataController):
         self._params = ParameterTree(_params)
 
         # Start up the status loop
-        self._status_running = True
-        self._update_time = datetime.now()
+        self._stop_event = threading.Event()
         self._status_thread = threading.Thread(target=self.update_loop)
         self._status_thread.start()
 
+    def _build_status_tree(self) -> dict:
+        """Build the status branch: detector reply fields plus local/derived ones"""
+        status = _schema_branch(
+            lambda: self._status,
+            "",
+            [
+                "state",
+                *(f"detector/{path}" for path in self.DETECTOR_STATUS_FIELDS),
+                *self.OTHER_STATUS_FIELDS,
+            ],
+        )
+        status.update(
+            {
+                "manufacturer": (lambda: "DLS/STFC", {}),
+                "model": (lambda: "Odin [Tristan]", {}),
+                "error": (lambda: "", {}),
+                "connected": (lambda: self._connected, {}),
+                "acquisition_complete": (lambda: self._acquisition_complete, {}),
+            }
+        )
+        status["detector"].update(
+            {
+                "bytes": (self._detector_bytes, {}),
+                "version_check": (self._version_check, {}),
+                "udp_packets_sent": (self._udp_packets_sent, {}),
+            }
+        )
+        for name in ("dpll_lol", "dpll_hold"):
+            status["clock"][name] = (
+                lambda n=name: _first(_lookup(self._status, f"clock/{n}")),
+                {},
+            )
+        for name, count in self.SENSOR_CHANNELS.items():
+            for index in range(count):
+                status["sensor"][f"{name}_{index}"] = (
+                    lambda n=name, i=index: _column(
+                        _lookup(self._status, f"sensor/{n}"), i
+                    ),
+                    {},
+                )
+        return status
+
+    def _detector_bytes(self):
+        """Size of a full detector frame in bytes (2 bytes per pixel)"""
+        x_pixels = _lookup(self._status, "detector/x_pixels_in_detector")
+        y_pixels = _lookup(self._status, "detector/y_pixels_in_detector")
+        if isinstance(x_pixels, int) and isinstance(y_pixels, int):
+            return x_pixels * y_pixels * 2
+        return None
+
+    def _version_check(self):
+        """Whether the connected detector runs the expected firmware version"""
+        return self._connected and self._firmware == _lookup(
+            self._status, "detector/software_version"
+        )
+
+    def _udp_packets_sent(self):
+        """Total UDP packets sent, summed over the per-module counts"""
+        packets = _lookup(self._status, "detector/udp_packets_sent")
+        if isinstance(packets, list):
+            return sum(packets)
+        return packets
+
     def shutdown(self):
         """Stop the status update thread and close the detector channel."""
-        self._status_running = False
+        self._stop_event.set()
         # Allow for an in-progress poll cycle (two detector requests) to time out
         self._status_thread.join(timeout=3 * self.DETECTOR_TIMEOUT / 1000)
         if self._status_thread.is_alive():
@@ -407,12 +565,12 @@ class TristanDetector(OdinDataController):
         counter = 0
         # Wait for the status to become armed
         logger.info("Arm command sent, waiting for armed response")
-        while self._params.get("status/state") != "armed" and counter < 50:
+        while _lookup(self._status, "state") != "armed" and counter < 50:
             time.sleep(0.2)
             counter += 1
 
         # Check for a timeout and if there is raise an error
-        if self._params.get("status/state") != "armed":
+        if _lookup(self._status, "state") != "armed":
             self.set_error("Time out waiting for detector armed state")
             # status_code = 408
             response["reply"] = "Time out waiting for detector armed state"
@@ -426,11 +584,11 @@ class TristanDetector(OdinDataController):
             counter = 0
             # Wait for the status to become running
             logger.info("Run command sent, waiting for running response")
-            while self._params.get("status/state") != "running" and counter < 50:
+            while _lookup(self._status, "state") != "running" and counter < 50:
                 time.sleep(0.2)
                 counter += 1
             # Check for a timeout and if there is raise an error
-            if self._params.get("status/state") != "running":
+            if _lookup(self._status, "state") != "running":
                 self.set_error("Time out waiting for detector running state")
                 # status_code = 408
                 response["reply"] = "Time out waiting for detector running state"
@@ -440,7 +598,7 @@ class TristanDetector(OdinDataController):
                 with self._comms_lock:
                     # Once the reply has been received, set the
                     # acquisition status to active
-                    self._params.set("status/acquisition_complete", False)
+                    self._acquisition_complete = False
                     logger.info("Acquisition confirmed, setting state to active")
             response["reply"] = str(reply)
 
@@ -496,234 +654,46 @@ class TristanDetector(OdinDataController):
         return reply
 
     def update_loop(self):
-        """Handle background update loop tasks.
-        This method handles background update tasks executed periodically in a thread
-        This includes requesting the status from the underlying application
-        and preparing the JSON encoded reply in a format that can be easily parsed.
+        """Poll the detector status and config every update interval until shutdown
+
+        Each poll replaces the stored status and config replies, which the parameter
+        tree reads from; the tree itself is never modified.
         """
-        while self._status_running:
-            time.sleep(0.1)
-            if (
-                float((datetime.now() - self._update_time).seconds)
-                > self._update_interval
-            ):
-                self._update_time = datetime.now()
-                try:
-                    with self._comms_lock:
-                        logger.debug("Updating status from detector...")
-                        # Update server uptime
-                        self._up_time = str(datetime.now() - self._start_time)
+        next_poll = time.monotonic()
+        while not self._stop_event.wait(max(0.0, next_poll - time.monotonic())):
+            next_poll = time.monotonic() + self._update_interval
+            try:
+                self._poll_detector()
+            except Exception:
+                logger.exception("Error polling detector")
 
-                        reply = self._send("get", "status", [self.DETECTOR_STATUS])
+    def _poll_detector(self):
+        """Request status and config from the detector and store the replies"""
+        self._up_time = str(datetime.now() - self._start_time)
 
-                        if reply is not None:
-                            logger.debug("Raw reply: %s", reply)
-                            if TristanMessage.MSG_TYPE_RESPONSE in reply.msg_type:
-                                data: dict = reply["data"]
-                                currently_connected = self._params.get(
-                                    "status/connected"
-                                )
-                                self._params.set("status", data["status"])
+        reply = self._send("get", "status", self.STATUS_REQUEST)
+        if not isinstance(reply, ResponseMessage):
+            if self._connected:
+                logger.warning("Lost connection to detector at %s", self._endpoint)
+            self._connected = False
+            return
 
-                                # Perform post status manipulation
-                                if "detector" in self._params.get("status"):
-                                    if "x_pixels_in_detector" in self._params.get(
-                                        "status/detector"
-                                    ) and "y_pixels_in_detector" in self._params.get(
-                                        "status/detector"
-                                    ):
-                                        x_pixels = self._params.get(
-                                            "status/detector/x_pixels_in_detector"
-                                        )
-                                        assert isinstance(x_pixels, int)
-                                        y_pixels = self._params.get(
-                                            "status/detector/y_pixels_in_detector"
-                                        )
-                                        assert isinstance(y_pixels, int)
-                                        self._params.set(
-                                            "status/detector/bytes",
-                                            x_pixels * y_pixels * 2,
-                                        )
-                                    # Sum the packets sent from the detector (by module)
-                                    # into a single total
-                                    if "udp_packets_sent" in self._params.get(
-                                        "status/detector"
-                                    ):
-                                        pckts = self._params.get(
-                                            "status/detector/udp_packets_sent"
-                                        )
-                                        if isinstance(pckts, list):
-                                            self._params.set(
-                                                "status/detector/udp_packets_sent",
-                                                len(pckts),
-                                            )
-                                # Check if we just reconnected
-                                if not currently_connected:
-                                    # Send timestamp config on reconnection
-                                    connect_time = datetime.now(tzlocal()).strftime(
-                                        "%Y-%m-%dT%H:%M%z"
-                                    )
-                                    reply = self._send(
-                                        "put", "config", {"time": connect_time}
-                                    )
-                                    # Resend the UDP configuration on re-connection
-                                    self.send_udp_config()
+        logger.debug("Status reply: %s", reply)
+        self._status = reply.data["status"]
+        if not self._connected:
+            logger.info("Connected to detector at %s", self._endpoint)
+            self._on_connect()
+            self._connected = True
+        if self._status.get("state") == "idle":
+            self._acquisition_complete = True
 
-                                # Now set the connection status to True
-                                self._params.set("status/connected", True)
-                                if self._firmware == self._params.get(
-                                    "status/detector/software_version"
-                                ):
-                                    self._params.set(
-                                        "status/detector/version_check", True
-                                    )
-                                else:
-                                    self._params.set(
-                                        "status/detector/version_check", False
-                                    )
+        reply = self._send("get", "config", self.CONFIG_REQUEST)
+        if isinstance(reply, ResponseMessage):
+            logger.debug("Config reply: %s", reply)
+            self._config = reply.data["config"]
 
-                                try:
-                                    if "clock" in self._params.get("status"):
-                                        if "dpll_lol" in self._params.get(
-                                            "status/clock"
-                                        ):
-                                            self._params.set(
-                                                "status/clock/dpll_lol",
-                                                self._params.get(
-                                                    "status/clock/dpll_lol"
-                                                )[0],
-                                            )
-                                        if "dpll_hold" in self._params.get(
-                                            "status/clock"
-                                        ):
-                                            self._params.set(
-                                                "status/clock/dpll_hold",
-                                                self._params.get(
-                                                    "status/clock/dpll_hold"
-                                                )[0],
-                                            )
-                                except Exception as ex:
-                                    logger.error("Error reading clock status items", ex)
-                                    logger.error("Exception: %s", ex)
-
-                                if "sensor" in self._params.get("status"):
-                                    if "temp_asics" in self._params.get(
-                                        "status/sensor"
-                                    ):
-                                        # temp_asics is 2D; split for monitoring
-                                        for index in range(self.TEMP_ASICS_COUNT):
-                                            self._params.set(
-                                                f"status/sensor/temp_asics_{index}", []
-                                            )
-                                            for temp in self._params.get(
-                                                "status/sensor/temp_asics"
-                                            ):
-                                                current = cast(
-                                                    dict,
-                                                    self._params.get(
-                                                        f"status/sensor/temp_asics_{index}"
-                                                    ),
-                                                )
-                                                cast(list, current["value"]).append(
-                                                    temp[index]
-                                                )
-                                                current = self._params.set(
-                                                    f"status/sensor/temp_asics_{index}",
-                                                    current,
-                                                )
-
-                                    if "temp_pcb" in self._params.get("status/sensor"):
-                                        # temp_pcb is 2D; split for monitoring
-                                        for index in range(self.TEMP_PCB_COUNT):
-                                            self._params.set(
-                                                f"status/sensor/temp_pcb_{index}", []
-                                            )
-                                            for temp in self._params.get(
-                                                "status/sensor/temp_pcb"
-                                            ):
-                                                current = cast(
-                                                    dict,
-                                                    self._params.get(
-                                                        f"status/sensor/temp_pcb_{index}"
-                                                    ),
-                                                )
-                                                cast(list, current["value"]).append(
-                                                    temp[index]
-                                                )
-                                                self._params.set(
-                                                    f"status/sensor/temp_pcb_{index}",
-                                                    current,
-                                                )
-
-                                    if "humidity" in self._params.get("status/sensor"):
-                                        # humidity is 2D; split for monitoring
-                                        for index in range(self.HUMIDITY_COUNT):
-                                            self._params.set(
-                                                f"status/sensor/humidity_{index}", []
-                                            )
-                                            for temp in self._params.get(
-                                                "status/sensor/humidity"
-                                            ):
-                                                current = cast(
-                                                    dict,
-                                                    self._params.get(
-                                                        f"status/sensor/humidity_{index}"
-                                                    ),
-                                                )
-                                                cast(list, current["value"]).append(
-                                                    temp[index]
-                                                )
-                                                self._params.set(
-                                                    f"status/sensor/humidity_{index}",
-                                                    current,
-                                                )
-
-                                # Set the acquisition state item
-                                if data["status"]["state"] == "idle":
-                                    self._params.set(
-                                        "status/acquisition_complete", True
-                                    )
-                        else:
-                            self._params.set("status/connected", False)
-                            self._params.set("status/detector/version_check", False)
-                        logger.debug("self._params: %s", self._params)
-
-                        config_dict = self.create_config_request(self._params)
-                        reply = self._send("get", "config", config_dict)
-
-                        if reply is not None:
-                            logger.debug("Raw reply: %s", reply)
-                            if TristanMessage.MSG_TYPE_RESPONSE in reply.msg_type:
-                                data = reply["data"]["config"]
-                                logger.debug("Reply data: %s", data)
-                                self.update_config(self._params, data)
-
-                        logger.debug("Status items: %s", self._params)
-                        logger.debug("Config parameters: %s", self._params)
-
-                except Exception as ex:
-                    logger.error("Exception: %s", ex)
-
-    def create_config_request(self, config):
-        config_dict = {}
-        for item in config:
-            if isinstance(config[item], dict):
-                config_dict[item] = self.create_config_request(config[item])
-            else:
-                config_dict[item] = None
-        return config_dict
-
-    def update_config(self, params, data):
-        for item in data:
-            logger.debug("Setting parameter for data item: %s", item)
-            if isinstance(data[item], dict):
-                if item in params:
-                    self.update_config(params[item], data[item])
-            else:
-                try:
-                    if item in params:
-                        logger.debug("Setting value to: %s", str(data[item]))
-                        params[item].set_value(data[item])
-                except Exception as ex:
-                    logger.error(f"Couldn't set param {item} to {data[item]}")
-                    logger.error("Exception thrown: %s", ex)
+    def _on_connect(self):
+        """Send the time and UDP configuration to a newly (re)connected detector"""
+        connect_time = datetime.now(tzlocal()).strftime("%Y-%m-%dT%H:%M%z")
+        self._send("put", "config", {"time": connect_time})
+        self.send_udp_config()

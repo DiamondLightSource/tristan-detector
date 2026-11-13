@@ -1,7 +1,10 @@
+import json
+
 import pytest
 
 from tristan_detector.control.tristan_channel import TristanChannel
-from tristan_detector.control.tristan_detector import TristanDetector
+from tristan_detector.control.tristan_detector import TristanDetector, _lookup
+from tristan_detector.control.tristan_message import ResponseMessage
 
 # Nothing listens here; the detector must still construct
 UNUSED_ENDPOINT = "tcp://127.0.0.1:59999"
@@ -111,3 +114,148 @@ def test_shutdown_stops_thread_and_closes_channel(monkeypatch, sent):
 
     assert not detector._status_thread.is_alive()
     assert closed == [True]
+
+
+STATUS_REPLY = {
+    "state": "idle",
+    "detector": {
+        "software_version": "1.0.0",
+        "x_pixels_in_detector": 2048,
+        "y_pixels_in_detector": 512,
+        "udp_packets_sent": [10, 20, 30],
+    },
+    "clock": {"dpll_lol": [True], "dpll_hold": [False], "clock_freq": 65.7},
+    "sensor": {
+        "temp_asics": [[50.0 + i for i in range(16)], [60.0 + i for i in range(16)]],
+        "temp_pcb": [[1.0, 2.0], [3.0, 4.0]],
+        "humidity": [[5.0, 6.0], [7.0, 8.0]],
+    },
+    "housekeeping": {"psu_temp": [28.6, 28.7]},
+}
+CONFIG_REPLY = {"exposure": 1.5, "trigger": {"start": "internal"}}
+
+
+@pytest.fixture
+def link(monkeypatch):
+    """Replace detector comms with canned replies, recording the messages sent
+
+    Set ``link.online = False`` to simulate the detector not replying.
+    """
+
+    class Link:
+        def __init__(self):
+            self.online = True
+            self.sent = []
+
+        def reply(self, msg):
+            self.sent.append((msg.msg_type, msg.params))
+            if not self.online:
+                return None
+            data = {}
+            if msg.msg_type == "get" and "status" in msg.params:
+                data = {"status": STATUS_REPLY}
+            elif msg.msg_type == "get" and "config" in msg.params:
+                data = {"config": CONFIG_REPLY}
+            return ResponseMessage(msg.msg_id, data)
+
+        def puts(self):
+            return [params for msg_type, params in self.sent if msg_type == "put"]
+
+    fake = Link()
+    monkeypatch.setattr(TristanDetector, "send_recv", lambda _, msg: fake.reply(msg))
+    return fake
+
+
+@pytest.fixture
+def polled(detector, link, tmp_path):
+    udp_file = tmp_path / "udp.json"
+    udp_file.write_text(json.dumps({"udp": {"dest": "10.0.0.1"}}))
+    detector._udp_config_file = str(udp_file)
+    return detector
+
+
+def test_requests_match_main(polled, link):
+    polled._poll_detector()
+    gets = [params for msg_type, params in link.sent if msg_type == "get"]
+    assert gets[0] == {"status": TristanDetector.STATUS_REQUEST}
+    # The config request holds a None leaf for every schema path
+    config_request = gets[1]["config"]
+    assert config_request["exposure"] is None
+    assert config_request["trigger"]["timestamp"]["fem"] is None
+    for path in TristanDetector.DETECTOR_CONFIG:
+        assert _lookup(config_request, path) is None
+        assert path.split("/")[0] in config_request
+
+
+def test_poll_stores_replies(polled):
+    assert polled.get("status/connected") == {"connected": False}
+    polled._poll_detector()
+    assert polled.get("status/connected") == {"connected": True}
+    assert polled.get("status/state") == {"state": "idle"}
+    assert polled.get("status/housekeeping/psu_temp") == {"psu_temp": [28.6, 28.7]}
+    assert polled.get("config/exposure") == {"exposure": 1.5}
+    assert polled.get("config/trigger/start") == {"start": "internal"}
+
+
+def test_derived_status_values(polled):
+    polled._poll_detector()
+    detector_status = polled.get("status/detector")["detector"]
+    assert detector_status["bytes"] == 2048 * 512 * 2
+    assert detector_status["version_check"] is True
+    assert detector_status["udp_packets_sent"] == 60
+    assert polled.get("status/clock") == {
+        "clock": {"dpll_lol": True, "dpll_hold": False, "clock_freq": 65.7}
+    }
+    sensor = polled.get("status/sensor")["sensor"]
+    assert sensor["temp_asics_0"] == [50.0, 60.0]
+    assert sensor["temp_asics_15"] == [65.0, 75.0]
+    assert sensor["temp_pcb_1"] == [2.0, 4.0]
+    assert sensor["humidity_0"] == [5.0, 7.0]
+
+
+def test_derived_values_are_none_before_detector_replies(detector):
+    detector_status = detector.get("status/detector")["detector"]
+    assert detector_status["bytes"] is None
+    assert detector_status["version_check"] is False
+    assert detector_status["udp_packets_sent"] is None
+    assert detector.get("status/sensor/temp_asics_3") == {"temp_asics_3": None}
+    assert detector.get("status/clock/dpll_lol") == {"dpll_lol": None}
+
+
+def test_version_check_fails_on_firmware_mismatch(polled):
+    polled._firmware = "2.0.0"
+    polled._poll_detector()
+    assert polled.get("status/detector/version_check") == {"version_check": False}
+
+
+def test_time_and_udp_config_sent_once_per_connection(polled, link):
+    polled._poll_detector()
+    polled._poll_detector()
+    puts = link.puts()
+    assert len(puts) == 2
+    assert "time" in puts[0]["config"]
+    assert puts[1] == {"config": {"udp": {"dest": "10.0.0.1"}}}
+
+    # Lose the detector: disconnected, nothing resent
+    link.online = False
+    polled._poll_detector()
+    assert polled.get("status/connected") == {"connected": False}
+    assert polled.get("status/detector/version_check") == {"version_check": False}
+    assert len(link.puts()) == 2
+
+    # Reconnect: config is sent again
+    link.online = True
+    polled._poll_detector()
+    assert polled.get("status/connected") == {"connected": True}
+    assert len(link.puts()) == 4
+
+
+def test_acquisition_complete_when_idle(polled):
+    polled._acquisition_complete = False
+    polled._poll_detector()
+    assert polled.get("status/acquisition_complete") == {"acquisition_complete": True}
+
+
+def test_every_status_path_is_in_tree(detector):
+    for path in TristanDetector.OTHER_STATUS_FIELDS:
+        detector.get(f"status/{path}")

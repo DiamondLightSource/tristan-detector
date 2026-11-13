@@ -66,3 +66,10 @@ def test_default_config_uses_allowed_enum_values(simulator):
     config = simulator._store["config"]
     for path, allowed_values in TristanDetector.DETECTOR_ENUMS.items():
         assert _lookup(config, path) in allowed_values, path
+
+
+def test_default_config_has_every_schema_path(simulator):
+    # The detector requests every schema path; a missing one fails the whole GET
+    config = simulator._store["config"]
+    for path in TristanDetector.DETECTOR_CONFIG:
+        assert _lookup(config, path) is not None, path
