@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from odin.adapters.parameter_tree import ParameterTreeError
 
 from tristan_detector.control import tristan_detector
 from tristan_detector.control.tristan_channel import TristanChannel
@@ -295,10 +296,14 @@ def test_config_put_message(detector, link, path, value, expected):
     [
         ("config/exposure/1", {"exposure": 1.0}),
         ("config/repeat_interval/0.5", {"repeat_interval": 0.5}),
+        # Not polled or in the tree, but still passed through
+        ("config/readout_time/0.25", {"readout_time": 0.25}),
         ("config/frames/10", {"frames": 10}),
         ("config/ntrigger/3.0", {"ntrigger": 3}),
         ("config/mode/count", {"mode": "count"}),
         ("config/threshold/5.2", {"threshold": "5.2"}),
+        # As on main, numeric text for string parameters goes through float
+        ("config/threshold/5", {"threshold": "5.0"}),
         ("config/frames/abc", {"frames": "abc"}),
         ("config/trigger/start/internal", {"trigger": {"start": "internal"}}),
         ("config/exposure_time/2", {"exposure": 2.0}),
@@ -343,7 +348,8 @@ def test_put_reply_is_none_without_detector(detector, link):
 
 
 @pytest.mark.parametrize(
-    "path, msg_type", [("engineering_put", "put"), ("engineering_get", "get")]
+    "path, msg_type",
+    [("engineering_put", "put"), ("engineering_get", "get"), ("engineering", "get")],
 )
 def test_engineering_sends_body_as_config(detector, link, path, msg_type):
     body = {"exposure": None, "trigger": {"start": None}}
@@ -357,7 +363,6 @@ def test_engineering_sends_body_as_config(detector, link, path, msg_type):
     [
         ("engineering_put", "not json", "requires a JSON object"),
         ("engineering_get", None, "requires a JSON object"),
-        ("engineering", {}, "Unknown path"),
         ("engineering_put/x", {}, "Unknown path"),
     ],
 )
@@ -439,3 +444,18 @@ def test_metadata_get_keeps_tree_shape(detector):
 
 def test_module_defaults_to_class_name(detector):
     assert detector.get("module") == {"module": "TristanDetector"}
+
+
+def test_status_paths_outside_schema_read_from_reply(detector):
+    detector._status = {"detector": {"detector_variant": "1M"}, "extra": {"a": 1}}
+    assert detector.get("status/detector/detector_variant") == {"value": "1M"}
+    assert detector.get("status/extra") == {"value": {"a": 1}}
+    # Fields the detector did not send read as None, as on main
+    assert detector.get("status/not/sent") == {"value": None}
+
+
+def test_unknown_paths_outside_status_are_errors(detector):
+    with pytest.raises(ParameterTreeError):
+        detector.get("config/not_in_schema")
+    with pytest.raises(ParameterTreeError):
+        detector.get("status/not/sent", meta=True)

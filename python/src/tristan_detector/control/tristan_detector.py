@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import Enum
 
 from dateutil.tz import tzlocal
-from odin.adapters.parameter_tree import ParameterTree
+from odin.adapters.parameter_tree import ParameterTree, ParameterTreeError
 
 from .tristan_channel import TristanChannel
 from .tristan_enums import (
@@ -147,6 +147,9 @@ class TristanDetector:
         "status/sensor/height": "status/detector/y_pixels_in_detector",
         "status/sensor/bytes": "status/detector/bytes",
     }
+    # Config parameters polled from the detector and shown in the tree, as on main.
+    # readout_time is deliberately absent (main never requested it); PUTs to it
+    # are still passed through.
     DETECTOR_CONFIG = [
         "exposure",
         "frames",
@@ -154,7 +157,6 @@ class TristanDetector:
         "mode",
         "ntrigger",
         "profile",
-        "readout_time",
         "repeat_interval",
         "threshold",
         "timeslice/duration_rollover_bits",
@@ -188,6 +190,11 @@ class TristanDetector:
         "frames": int,
         "frames_per_trigger": int,
         "ntrigger": int,
+        # main converted these with str(float(text)), so "5" is sent as "5.0";
+        # non-numeric text is sent unchanged
+        "threshold": str,
+        "mode": str,
+        "profile": str,
     }
 
     # Status request sent to the detector each poll, as on main (known to work
@@ -501,7 +508,15 @@ class TristanDetector:
         if path == "status/detector/description" and not meta:
             result = {"description": _lookup(self._status, "detector/description")}
         else:
-            result = self._params.get(path, with_metadata=meta)
+            try:
+                result = self._params.get(path, with_metadata=meta)
+            except ParameterTreeError:
+                # As on main, any other status path is looked up in the latest
+                # status reply, reading as None if the detector did not send it
+                if meta or not path.startswith(f"{self.STR_STATUS}/"):
+                    raise
+                status_path = path.removeprefix(f"{self.STR_STATUS}/")
+                return {"value": _lookup(self._status, status_path)}
             assert isinstance(result, dict)
 
         # As on main (and as the web UI expects), status and config values are
@@ -553,11 +568,14 @@ class TristanDetector:
                 logger.info("Config PUT: %s", config)
                 reply = self._send("put", "config", config)
 
-            case "engineering_put" | "engineering_get" if len(config_items) == 1:
+            case "engineering" | "engineering_put" | "engineering_get" if (
+                len(config_items) == 1
+            ):
                 # Send an arbitrary JSON object to the hardware as config
                 if not isinstance(value, dict):
                     raise ValueError(f"{path} requires a JSON object, got {value!r}")
                 logger.debug("Engineering PUT: path=%s, data=%s", path, value)
+                # As on main, a bare "engineering" path is a GET
                 msg_type = "put" if path == "engineering_put" else "get"
                 reply = self._send(msg_type, "config", value)
 
