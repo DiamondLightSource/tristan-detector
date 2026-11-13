@@ -9,8 +9,8 @@ commands and logs the responses.
 import argparse
 import logging
 
-from .tristan_channel import TristanChannel
-from .tristan_message import (
+from tristan_detector.control.tristan_channel import TristanChannel
+from tristan_detector.control.tristan_message import (
     GetMessage,
     PostMessage,
     PutMessage,
