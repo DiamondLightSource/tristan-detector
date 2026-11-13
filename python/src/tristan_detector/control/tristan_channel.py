@@ -48,6 +48,10 @@ class TristanChannel:
             if isinstance(identity, str):
                 identity = identity.encode()
             self.socket.setsockopt(zmq.IDENTITY, identity)
+            # Only queue messages to a connected peer, so a request made while the
+            # detector is unavailable fails immediately instead of being delivered
+            # (possibly much later) when it reconnects
+            self.socket.setsockopt(zmq.IMMEDIATE, 1)
 
     def bind(self, endpoint=None):
 

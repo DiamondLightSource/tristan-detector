@@ -34,7 +34,11 @@ def client(simulator):
 def request(simulator, client, params):
     """Send a GET to the simulator, run its handler once and return the reply"""
     msg = GetMessage(params=params)
-    client.send(msg)
+    # The dealer only accepts messages once its connection is established
+    deadline = time.monotonic() + 2
+    while client.send(msg) < 0:
+        assert time.monotonic() < deadline, "client never connected"
+        time.sleep(0.01)
     assert simulator._ctrl_channel.poll(2000), "simulator received nothing"
     simulator.handle_ctrl_msg()
     assert client.poll(2000), "no reply from simulator"
