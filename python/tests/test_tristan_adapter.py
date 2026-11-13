@@ -6,13 +6,15 @@ from odin.adapters.parameter_tree import ParameterTreeError
 
 from tristan_detector.control import tristan_adapter
 from tristan_detector.control.tristan_adapter import TristanAdapter
+from tristan_detector.control.tristan_detector import DetectorTimeoutError
 
 
 class FakeDetector:
     """Stands in for TristanDetector so the adapter can be tested without hardware"""
 
-    def __init__(self, endpoint, firmware, udp_config_file, update_interval):
+    def __init__(self, endpoint, firmware, udp_config_file, update_interval, module):
         self.args = (endpoint, firmware, udp_config_file, update_interval)
+        self.module = module
         self.calls = []
         self.shut_down = False
 
@@ -26,6 +28,9 @@ class FakeDetector:
         self.calls.append(("put", path, value))
         if path == "bad":
             raise ValueError("Unknown path: bad")
+        if path == "slow":
+            raise DetectorTimeoutError("Time out waiting for detector armed state")
+        return {"reply": f"reply to {path}"}
 
     def delete(self, path):
         self.calls.append(("delete", path))
@@ -132,3 +137,18 @@ def test_delete_is_not_implemented(adapter):
 def test_cleanup_shuts_down_controller(adapter):
     adapter.cleanup()
     assert adapter._controller.shut_down
+
+
+def test_put_returns_controller_reply(adapter):
+    response = adapter.put("command/arm", json_request())
+    assert response.data == {"reply": "reply to command/arm"}
+
+
+def test_put_timeout_is_request_timeout(adapter):
+    response = adapter.put("slow", json_request())
+    assert response.status_code == 408
+    assert "armed state" in response.data["error"]
+
+
+def test_adapter_name_is_reported_as_module(adapter):
+    assert adapter._controller.module == "TristanAdapter"

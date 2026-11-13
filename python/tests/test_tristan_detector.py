@@ -2,8 +2,13 @@ import json
 
 import pytest
 
+from tristan_detector.control import tristan_detector
 from tristan_detector.control.tristan_channel import TristanChannel
-from tristan_detector.control.tristan_detector import TristanDetector, _lookup
+from tristan_detector.control.tristan_detector import (
+    DetectorTimeoutError,
+    TristanDetector,
+    _lookup,
+)
 from tristan_detector.control.tristan_message import ResponseMessage
 
 # Nothing listens here; the detector must still construct
@@ -37,13 +42,11 @@ def test_construction_does_not_contact_detector(detector, sent):
 
 
 def test_schema_paths_exist_before_detector_replies(detector):
-    assert detector.get("status/state") == {"state": None}
-    assert detector.get("status/detector/x_pixels_in_detector") == {
-        "x_pixels_in_detector": None
-    }
-    assert detector.get("status/detector/module_dimensions/x_max") == {"x_max": None}
-    assert detector.get("config/exposure") == {"exposure": None}
-    assert detector.get("config/trigger/timestamp/fem") == {"fem": None}
+    assert detector.get("status/state") == {"value": None}
+    assert detector.get("status/detector/x_pixels_in_detector") == {"value": None}
+    assert detector.get("status/detector/module_dimensions/x_max") == {"value": None}
+    assert detector.get("config/exposure") == {"value": None}
+    assert detector.get("config/trigger/timestamp/fem") == {"value": None}
 
 
 @pytest.mark.parametrize("meta", [False, True])
@@ -57,7 +60,7 @@ def test_every_schema_path_is_in_tree(detector, meta):
 def test_description_is_readable_despite_reserved_name(detector):
     # "description" is a ParameterTree metadata field name
     detector._status = {"detector": {"description": "Tristan 10M"}}
-    assert detector.get("status/detector/description") == {"description": "Tristan 10M"}
+    assert detector.get("status/detector/description") == {"value": "Tristan 10M"}
     response = detector.get("status/detector/description", meta=True)
     assert response["description"]["value"] == "Tristan 10M"
 
@@ -82,21 +85,19 @@ def test_leaves_read_latest_store_contents(detector):
     }
     detector._config = {"exposure": 1.5, "trigger": {"start": "external_re"}}
 
-    assert detector.get("status/state") == {"state": "idle"}
-    assert detector.get("status/detector/x_pixels_in_detector") == {
-        "x_pixels_in_detector": 4096
-    }
-    assert detector.get("status/detector/module_dimensions/x_max") == {"x_max": [7]}
-    assert detector.get("config/exposure") == {"exposure": 1.5}
-    assert detector.get("config/trigger/start") == {"start": "external_re"}
+    assert detector.get("status/state") == {"value": "idle"}
+    assert detector.get("status/detector/x_pixels_in_detector") == {"value": 4096}
+    assert detector.get("status/detector/module_dimensions/x_max") == {"value": [7]}
+    assert detector.get("config/exposure") == {"value": 1.5}
+    assert detector.get("config/trigger/start") == {"value": "external_re"}
     # Paths absent from the reply still read as None rather than erroring
-    assert detector.get("config/frames") == {"frames": None}
+    assert detector.get("config/frames") == {"value": None}
 
 
 def test_local_fields(detector):
     assert detector.get("firmware") == {"firmware": "1.0.0"}
     assert detector.get("udp_file") == {"udp_file": "./udp.json"}
-    assert detector.get("status/manufacturer") == {"manufacturer": "DLS/STFC"}
+    assert detector.get("status/manufacturer") == {"value": "DLS/STFC"}
 
 
 def test_shutdown_stops_thread_and_closes_channel(monkeypatch, sent):
@@ -146,9 +147,14 @@ def link(monkeypatch):
         def __init__(self):
             self.online = True
             self.sent = []
+            self.last_msg_id = None
+            self.on_send = None
 
         def reply(self, msg):
             self.sent.append((msg.msg_type, msg.params))
+            if self.on_send is not None:
+                self.on_send(msg)
+            self.last_msg_id = msg.msg_id
             if not self.online:
                 return None
             data = {}
@@ -188,25 +194,25 @@ def test_requests_match_main(polled, link):
 
 
 def test_poll_stores_replies(polled):
-    assert polled.get("status/connected") == {"connected": False}
+    assert polled.get("status/connected") == {"value": False}
     polled._poll_detector()
-    assert polled.get("status/connected") == {"connected": True}
-    assert polled.get("status/state") == {"state": "idle"}
-    assert polled.get("status/housekeeping/psu_temp") == {"psu_temp": [28.6, 28.7]}
-    assert polled.get("config/exposure") == {"exposure": 1.5}
-    assert polled.get("config/trigger/start") == {"start": "internal"}
+    assert polled.get("status/connected") == {"value": True}
+    assert polled.get("status/state") == {"value": "idle"}
+    assert polled.get("status/housekeeping/psu_temp") == {"value": [28.6, 28.7]}
+    assert polled.get("config/exposure") == {"value": 1.5}
+    assert polled.get("config/trigger/start") == {"value": "internal"}
 
 
 def test_derived_status_values(polled):
     polled._poll_detector()
-    detector_status = polled.get("status/detector")["detector"]
+    detector_status = polled.get("status/detector")["value"]
     assert detector_status["bytes"] == 2048 * 512 * 2
     assert detector_status["version_check"] is True
     assert detector_status["udp_packets_sent"] == 60
     assert polled.get("status/clock") == {
-        "clock": {"dpll_lol": True, "dpll_hold": False, "clock_freq": 65.7}
+        "value": {"dpll_lol": True, "dpll_hold": False, "clock_freq": 65.7}
     }
-    sensor = polled.get("status/sensor")["sensor"]
+    sensor = polled.get("status/sensor")["value"]
     assert sensor["temp_asics_0"] == [50.0, 60.0]
     assert sensor["temp_asics_15"] == [65.0, 75.0]
     assert sensor["temp_pcb_1"] == [2.0, 4.0]
@@ -214,18 +220,18 @@ def test_derived_status_values(polled):
 
 
 def test_derived_values_are_none_before_detector_replies(detector):
-    detector_status = detector.get("status/detector")["detector"]
+    detector_status = detector.get("status/detector")["value"]
     assert detector_status["bytes"] is None
     assert detector_status["version_check"] is False
     assert detector_status["udp_packets_sent"] is None
-    assert detector.get("status/sensor/temp_asics_3") == {"temp_asics_3": None}
-    assert detector.get("status/clock/dpll_lol") == {"dpll_lol": None}
+    assert detector.get("status/sensor/temp_asics_3") == {"value": None}
+    assert detector.get("status/clock/dpll_lol") == {"value": None}
 
 
 def test_version_check_fails_on_firmware_mismatch(polled):
     polled._firmware = "2.0.0"
     polled._poll_detector()
-    assert polled.get("status/detector/version_check") == {"version_check": False}
+    assert polled.get("status/detector/version_check") == {"value": False}
 
 
 def test_time_and_udp_config_sent_once_per_connection(polled, link):
@@ -239,23 +245,197 @@ def test_time_and_udp_config_sent_once_per_connection(polled, link):
     # Lose the detector: disconnected, nothing resent
     link.online = False
     polled._poll_detector()
-    assert polled.get("status/connected") == {"connected": False}
-    assert polled.get("status/detector/version_check") == {"version_check": False}
+    assert polled.get("status/connected") == {"value": False}
+    assert polled.get("status/detector/version_check") == {"value": False}
     assert len(link.puts()) == 2
 
     # Reconnect: config is sent again
     link.online = True
     polled._poll_detector()
-    assert polled.get("status/connected") == {"connected": True}
+    assert polled.get("status/connected") == {"value": True}
     assert len(link.puts()) == 4
 
 
 def test_acquisition_complete_when_idle(polled):
     polled._acquisition_complete = False
     polled._poll_detector()
-    assert polled.get("status/acquisition_complete") == {"acquisition_complete": True}
+    assert polled.get("status/acquisition_complete") == {"value": True}
 
 
 def test_every_status_path_is_in_tree(detector):
     for path in TristanDetector.OTHER_STATUS_FIELDS:
         detector.get(f"status/{path}")
+
+
+@pytest.mark.parametrize(
+    "path, value, expected",
+    [
+        ("config/exposure", 1.5, {"exposure": 1.5}),
+        (
+            "config/trigger/timestamp/fem",
+            "re",
+            {"trigger": {"timestamp": {"fem": "re"}}},
+        ),
+        ("config", {"frames": 10, "mode": "count"}, {"frames": 10, "mode": "count"}),
+        ("config/trigger", {"start": "internal"}, {"trigger": {"start": "internal"}}),
+        # Paths outside the schema are passed through for the detector to judge
+        ("config/bias/voltage", 50.0, {"bias": {"voltage": 50.0}}),
+        # ADOdin names
+        ("config/exposure_time", 2.0, {"exposure": 2.0}),
+        ("config/num_images", 5, {"frames": 5}),
+    ],
+)
+def test_config_put_message(detector, link, path, value, expected):
+    detector.put(path, value)
+    assert link.puts() == [{"config": expected}]
+
+
+@pytest.mark.parametrize(
+    "path, expected",
+    [
+        ("config/exposure/1", {"exposure": 1.0}),
+        ("config/repeat_interval/0.5", {"repeat_interval": 0.5}),
+        ("config/frames/10", {"frames": 10}),
+        ("config/ntrigger/3.0", {"ntrigger": 3}),
+        ("config/mode/count", {"mode": "count"}),
+        ("config/threshold/5.2", {"threshold": "5.2"}),
+        ("config/frames/abc", {"frames": "abc"}),
+        ("config/trigger/start/internal", {"trigger": {"start": "internal"}}),
+        ("config/exposure_time/2", {"exposure": 2.0}),
+    ],
+)
+def test_config_put_value_in_url(detector, link, path, expected):
+    # The web UI sends config/<name>/<value> with an empty body
+    detector.put(path, None)
+    assert link.puts() == [{"config": expected}]
+    for value in expected.values():
+        if isinstance(value, float):
+            assert type(value) is float
+
+
+@pytest.mark.parametrize(
+    "path, value, match",
+    [
+        ("config/mode", "bogus", "Invalid value 'bogus' for config/mode"),
+        ("config/mode/bogus", None, "allowed values: time_energy, time_only, count"),
+        ("config", {"trigger": {"timestamp": {"ttl": "up"}}}, "trigger/timestamp/ttl"),
+        ("config", None, "No value given"),
+        ("config/exposure", None, "No value given"),
+        ("config", 1.5, "requires an object"),
+    ],
+)
+def test_invalid_config_put_is_rejected(detector, link, path, value, match):
+    with pytest.raises(ValueError, match=match):
+        detector.put(path, value)
+    assert link.sent == []
+
+
+def test_put_returns_detector_reply(detector, link):
+    response = detector.put("config/exposure", 1.5)
+    reply = json.loads(response["reply"])
+    assert reply["msg_type"] == "response"
+    assert reply["msg_id"] == link.last_msg_id
+
+
+def test_put_reply_is_none_without_detector(detector, link):
+    link.online = False
+    assert detector.put("command/stop", None) == {"reply": None}
+
+
+@pytest.mark.parametrize(
+    "path, msg_type", [("engineering_put", "put"), ("engineering_get", "get")]
+)
+def test_engineering_sends_body_as_config(detector, link, path, msg_type):
+    body = {"exposure": None, "trigger": {"start": None}}
+    response = detector.put(path, body)
+    assert link.sent == [(msg_type, {"config": body})]
+    assert response["reply"] is not None
+
+
+@pytest.mark.parametrize(
+    "path, value, match",
+    [
+        ("engineering_put", "not json", "requires a JSON object"),
+        ("engineering_get", None, "requires a JSON object"),
+        ("engineering", {}, "Unknown path"),
+        ("engineering_put/x", {}, "Unknown path"),
+    ],
+)
+def test_invalid_engineering_put_is_rejected(detector, link, path, value, match):
+    with pytest.raises(ValueError, match=match):
+        detector.put(path, value)
+    assert link.sent == []
+
+
+def test_error_is_set_and_cleared_by_next_put(detector, link):
+    assert detector.get("status/error") == {"value": ""}
+    detector.set_error("Something went wrong")
+    assert detector.get("status/error") == {"value": "Something went wrong"}
+    detector.put("config/exposure", 1.0)
+    assert detector.get("status/error") == {"value": ""}
+
+
+def test_missing_udp_file_sets_error(detector, link, tmp_path):
+    detector._udp_config_file = str(tmp_path / "missing.json")
+    detector._poll_detector()
+    assert (
+        "Failed to open UDP configuration file" in detector.get("status/error")["value"]
+    )
+
+
+@pytest.fixture
+def no_sleep(monkeypatch):
+    monkeypatch.setattr(tristan_detector.time, "sleep", lambda _: None)
+
+
+def test_start_acquisition_times_out_waiting_for_armed(detector, link, no_sleep):
+    with pytest.raises(DetectorTimeoutError, match="armed state"):
+        detector.put("command/start_acquisition", None)
+    assert detector.get("status/error") == {
+        "value": "Time out waiting for detector armed state"
+    }
+    # Nothing after the arm command is sent
+    assert link.sent == [("post", {"command": "arm"})]
+
+
+def test_start_acquisition_times_out_waiting_for_running(detector, link, no_sleep):
+    detector._status = {"state": "armed"}
+    with pytest.raises(DetectorTimeoutError, match="running state"):
+        detector.put("command/start_acquisition", None)
+    assert "running state" in detector.get("status/error")["value"]
+
+
+def test_start_acquisition_arms_then_runs(detector, link, no_sleep):
+    def follow_commands(msg):
+        # Act like the detector, changing state in response to commands
+        states = {"arm": "armed", "run": "running"}
+        detector._status = {"state": states[msg.params["command"]]}
+
+    link.on_send = follow_commands
+    response = detector.put("command/start_acquisition", None)
+    assert link.sent == [("post", {"command": "arm"}), ("post", {"command": "run"})]
+    assert json.loads(response["reply"])["msg_type"] == "response"
+    assert detector.get("status/acquisition_complete") == {"value": False}
+    assert detector.get("status/error") == {"value": ""}
+
+
+def test_get_response_shapes_match_main(detector):
+    # The web UI reads response['value'] for status and config paths ...
+    detector._status = {"state": "idle", "detector": {"description": "Tristan"}}
+    assert detector.get("status/state") == {"value": "idle"}
+    assert detector.get("status/detector/description") == {"value": "Tristan"}
+    assert detector.get("status/connected") == {"value": False}
+    assert detector.get("status/detector")["value"]["bytes"] is None
+    # ... and response.<name> for top-level fields
+    assert detector.get("endpoint") == {"endpoint": UNUSED_ENDPOINT}
+    assert detector.get("username") == {"username": detector._username}
+
+
+def test_metadata_get_keeps_tree_shape(detector):
+    response = detector.get("status/state", meta=True)
+    assert set(response) == {"state"}
+    assert response["state"]["value"] is None
+
+
+def test_module_defaults_to_class_name(detector):
+    assert detector.get("module") == {"module": "TristanDetector"}

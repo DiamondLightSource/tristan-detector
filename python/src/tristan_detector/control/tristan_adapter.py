@@ -10,7 +10,7 @@ from odin.adapters.adapter import (
 from odin.adapters.parameter_tree import ParameterTreeError
 from tornado.escape import json_decode
 
-from .tristan_detector import TristanDetector
+from .tristan_detector import DetectorTimeoutError, TristanDetector
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ class TristanAdapter(ApiAdapter):
             self.options.get("firmware", ""),
             self.options.get("udp_file", "./udp_tristan.json"),
             float(self.options.get("update_interval", 0.5)),
+            module=self.name,
         )
 
     @request_types("application/json", "application/vnd.odin-native")
@@ -67,17 +68,23 @@ class TristanAdapter(ApiAdapter):
         """Handle an HTTP PUT request by passing the decoded body to the controller
 
         The body may be empty (e.g. for commands), a JSON document or a plain string.
+        The controller's result (the detector's reply) is returned as the body.
 
         :param path: URI path of the PUT request
         :param request: Tornado HTTP request object
         :return: ApiAdapterResponse object to be returned to the client
         """
         try:
-            self._controller.put(path.strip("/"), self._decode_body(request.body))
-            response, status_code = {}, 200
+            response = self._controller.put(
+                path.strip("/"), self._decode_body(request.body)
+            )
+            status_code = 200
         except (ParameterTreeError, ValueError) as error:
             response = {"error": f"{self.name} PUT error: {error}"}
             status_code = 400
+        except DetectorTimeoutError as error:
+            response = {"error": f"{self.name} PUT error: {error}"}
+            status_code = 408
 
         return ApiAdapterResponse(response, status_code=status_code)
 

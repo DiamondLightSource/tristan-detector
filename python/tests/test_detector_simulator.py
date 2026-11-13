@@ -59,7 +59,7 @@ def detector(simulator, tmp_path):
 
 
 def connected(detector):
-    return detector.get("status/connected")["connected"]
+    return detector.get("status/connected")["value"]
 
 
 def test_reactor_stops_promptly():
@@ -71,19 +71,17 @@ def test_reactor_stops_promptly():
 
 def test_detector_reads_simulator_status_and_config(detector, simulator):
     wait_for(lambda: connected(detector))
-    wait_for(lambda: detector.get("config/mode")["mode"] is not None)
+    wait_for(lambda: detector.get("config/mode")["value"] is not None)
 
-    assert detector.get("status/state") == {"state": "idle"}
-    detector_status = detector.get("status/detector")["detector"]
+    assert detector.get("status/state") == {"value": "idle"}
+    detector_status = detector.get("status/detector")["value"]
     assert detector_status["x_pixels_in_detector"] == 2048
     assert detector_status["bytes"] == 2048 * 512 * 2
     assert detector_status["version_check"] is True
-    assert detector.get("status/clock/dpll_lol") == {"dpll_lol": True}
-    assert detector.get("status/sensor/temp_asics_1") == {"temp_asics_1": [50.1]}
-    assert detector.get("config/mode") == {"mode": "time_energy"}
-    assert detector.get("config/timeslice/duration_rollover_bits") == {
-        "duration_rollover_bits": 18
-    }
+    assert detector.get("status/clock/dpll_lol") == {"value": True}
+    assert detector.get("status/sensor/temp_asics_1") == {"value": [50.1]}
+    assert detector.get("config/mode") == {"value": "time_energy"}
+    assert detector.get("config/timeslice/duration_rollover_bits") == {"value": 18}
 
 
 def test_connecting_sends_time_and_udp_config(detector, simulator):
@@ -98,7 +96,7 @@ def test_detector_notices_simulator_going_away(detector, simulator):
     wait_for(lambda: connected(detector))
     simulator.stop()
     wait_for(lambda: not connected(detector))
-    assert detector.get("status/detector/version_check") == {"version_check": False}
+    assert detector.get("status/detector/version_check") == {"value": False}
 
 
 def test_shutdown_is_prompt(simulator, tmp_path):
@@ -108,3 +106,27 @@ def test_shutdown_is_prompt(simulator, tmp_path):
     detector.shutdown()
     # Without the stop event this would wait out the 5 s update interval
     assert time.monotonic() - start < 1
+
+
+def test_config_put_reaches_simulator(detector, simulator):
+    wait_for(lambda: connected(detector))
+    detector.put("config/exposure", 2.5)
+    detector.put("config/frames/7", None)
+    assert simulator.store["config"]["exposure"] == 2.5
+    assert simulator.store["config"]["frames"] == 7
+    wait_for(lambda: detector.get("config/exposure") == {"value": 2.5})
+
+
+def test_engineering_get_returns_simulator_reply(detector, simulator):
+    wait_for(lambda: connected(detector))
+    response = detector.put("engineering_get", {"exposure": None, "mode": None})
+    reply = json.loads(response["reply"])
+    assert reply["data"]["config"] == {"exposure": 0.0, "mode": "time_energy"}
+
+
+def test_start_acquisition_against_simulator(detector, simulator):
+    wait_for(lambda: connected(detector))
+    detector.put("command/start_acquisition", None)
+    assert simulator.store["status"]["state"] == "running"
+    assert detector.get("status/acquisition_complete") == {"value": False}
+    assert detector.get("status/error") == {"value": ""}

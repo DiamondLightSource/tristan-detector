@@ -124,6 +124,10 @@ def _column(value, index: int):
         return None
 
 
+class DetectorTimeoutError(Exception):
+    """The detector did not reach an expected state in time"""
+
+
 class TristanDetector(OdinDataController):
     """
     TristanDetector class.
@@ -177,6 +181,17 @@ class TristanDetector(OdinDataController):
     DETECTOR_ENUMS = {
         path: [e.name for e in enum_type]
         for path, enum_type in CONFIG_ENUM_TYPES.items()
+    }
+
+    # Types of numeric config values given in the URL (PUT config/<name>/<value>),
+    # as on main
+    CONFIG_URL_VALUE_TYPES = {
+        "exposure": float,
+        "repeat_interval": float,
+        "readout_time": float,
+        "frames": int,
+        "frames_per_trigger": int,
+        "ntrigger": int,
     }
 
     CORE_STATUS_LIST = {
@@ -305,6 +320,7 @@ class TristanDetector(OdinDataController):
         firmware: str,
         udp_config_file: str,
         update_interval: float,
+        module: str | None = None,
     ):
         """
         Initialise the TristanDetector object.
@@ -314,6 +330,8 @@ class TristanDetector(OdinDataController):
         self._firmware = firmware
         self._udp_config_file = udp_config_file
         self._update_interval = update_interval
+        # Reported as the module field; the owning adapter passes its own name
+        self._module = module or type(self).__name__
         self._error = ""
         self._armed = False
         self._start_time = datetime.now()
@@ -341,7 +359,8 @@ class TristanDetector(OdinDataController):
                 {},
             ),
             "username": (lambda: self._username, {}),
-            "module": (lambda: type(self).__name__, {}),
+            "module": (lambda: self._module, {}),
+            "endpoint": (lambda: self._endpoint, {}),
             "firmware": (lambda: self._firmware, {}),
             "udp_file": (lambda: self._udp_config_file, {}),
             "update_interval": (lambda: self._update_interval, {}),
@@ -412,7 +431,7 @@ class TristanDetector(OdinDataController):
             {
                 "manufacturer": (lambda: "DLS/STFC", {}),
                 "model": (lambda: "Odin [Tristan]", {}),
-                "error": (lambda: "", {}),
+                "error": (lambda: self._error, {}),
                 "connected": (lambda: self._connected, {}),
                 "acquisition_complete": (lambda: self._acquisition_complete, {}),
             }
@@ -460,6 +479,15 @@ class TristanDetector(OdinDataController):
             return sum(packets)
         return packets
 
+    def set_error(self, err: str):
+        """Record an error message in status/error and log it"""
+        self._error = err
+        logger.error(err)
+
+    def clear_error(self):
+        """Clear the error message in status/error"""
+        self._error = ""
+
     def shutdown(self):
         """Stop the status update thread and close the detector channel."""
         self._stop_event.set()
@@ -486,10 +514,15 @@ class TristanDetector(OdinDataController):
         # metadata it rejects this path (and omits the leaf from its parent). Serve it
         # directly; with metadata the tree handles it normally.
         if path == "status/detector/description" and not meta:
-            return {"description": _lookup(self._status, "detector/description")}
+            result = {"description": _lookup(self._status, "detector/description")}
+        else:
+            result = self._params.get(path, with_metadata=meta)
 
-        # Return from parameter tree
-        return self._params.get(path, with_metadata=meta)
+        # As on main (and as the web UI expects), status and config values are
+        # returned as {"value": v}; top-level fields keep their name as the key
+        if not meta and path.split("/")[0] in (self.STR_STATUS, self.STR_CONFIG):
+            return {"value": result[path.rsplit("/", 1)[-1]]}
+        return result
 
     def _send(self, cmd_type: str, cmd: str, value: str | int | float | dict | list):
         match cmd_type:
@@ -508,7 +541,11 @@ class TristanDetector(OdinDataController):
         return reply
 
     def put(self, path, value):
-        """Handle PUT requests from the controller interface."""
+        """Handle PUT requests from the controller interface.
+
+        :return: ``{"reply": ...}`` holding the detector's reply as a JSON string,
+            or None if it did not reply
+        """
         self.clear_error()
         if path in self.ADODIN_MAPPING:
             path = self.ADODIN_MAPPING[path]
@@ -518,44 +555,89 @@ class TristanDetector(OdinDataController):
             case "command":
                 logger.debug("Command message: %s", config_items[1])
                 if path == "command/start_acquisition":
-                    self._arm_then_run()
+                    return self._arm_then_run()
                 elif path == "command/stop_acquisition":
                     # Send a stop command
-                    self._send("post", "command", "stop")
+                    reply = self._send("post", "command", "stop")
                 else:
-                    self._send("post", "command", config_items[1])
+                    reply = self._send("post", "command", config_items[1])
 
             case "config":
-                command, value_dict = self._parse_config_put(path, value)
-                logger.info("Config command: %s", command)
-                logger.info("Config dict: %s", value_dict)
-                self._send("put", command, value_dict)
+                config = self._config_put_params(path, value)
+                logger.info("Config PUT: %s", config)
+                reply = self._send("put", "config", config)
 
-            case "engineering":
-                # This special command allows an arbitrary JSON object to be
-                # sent to the hardware
+            case "engineering_put" | "engineering_get" if len(config_items) == 1:
+                # Send an arbitrary JSON object to the hardware as config
+                if not isinstance(value, dict):
+                    raise ValueError(f"{path} requires a JSON object, got {value!r}")
                 logger.debug("Engineering PUT: path=%s, data=%s", path, value)
-                msg_type = "put" if "engineering_put" in config_items[0] else "get"
-                self._send(msg_type, "config", value)
+                msg_type = "put" if path == "engineering_put" else "get"
+                reply = self._send(msg_type, "config", value)
 
             case _:
                 raise ValueError(f"Unknown path: {path}")
+
+        return {"reply": None if reply is None else str(reply)}
 
     def delete(self, path):
         """Handle DELETE requests — not supported for this detector."""
         raise NotImplementedError(f"DELETE {path} is not supported")
 
-    def _parse_config_put(self, path, data):
-        """Parse a config PUT request into command and value dict."""
-        if data is None:
-            return path, {}
-        if isinstance(data, dict):
-            return path, data
-        # Simple value — wrap in the path structure
-        return path, {"value": data}
+    def _config_put_params(self, path: str, value) -> dict:
+        """Build the config dict to send to the detector for a config PUT
+
+        ``PUT config/a/b`` with value ``v`` gives ``{"a": {"b": v}}``, and ``PUT
+        config`` takes a dict value as is. Any path is passed through; the detector
+        decides which are valid. With no value (an empty body), the final path
+        segment is the value, e.g. ``config/exposure/1.5``, as the web UI sends.
+
+        :raises ValueError: if no value is given or an enum value is not allowed
+        """
+        if value is None:
+            parent, _, text = path.rpartition("/")
+            if "/" not in parent:
+                raise ValueError(f"No value given for config PUT to {path}")
+            path = self.ADODIN_MAPPING.get(parent, parent)
+            value = self._parse_url_value(path.rsplit("/", 1)[1], text)
+        path = self.ADODIN_MAPPING.get(path, path)
+
+        keys = path.split("/")[1:]
+        if not keys and not isinstance(value, dict):
+            raise ValueError(f"PUT to config requires an object, got {value!r}")
+        config = value
+        for key in reversed(keys):
+            config = {key: config}
+        assert isinstance(config, dict)
+        self._check_enum_values(config)
+        return config
+
+    def _parse_url_value(self, name: str, text: str):
+        """Convert a config value given in the URL, as on main
+
+        Known numeric parameters are converted; other values stay strings.
+        """
+        value_type = self.CONFIG_URL_VALUE_TYPES.get(name)
+        if value_type is None:
+            return text
+        try:
+            return value_type(float(text))
+        except ValueError:
+            return text
+
+    def _check_enum_values(self, config: dict, prefix: str = ""):
+        """Raise ValueError if any enumerated value in ``config`` is not allowed"""
+        for key, value in config.items():
+            path = f"{prefix}{key}"
+            if isinstance(value, dict):
+                self._check_enum_values(value, f"{path}/")
+            elif path in self.DETECTOR_ENUMS and value not in self.DETECTOR_ENUMS[path]:
+                raise ValueError(
+                    f"Invalid value {value!r} for config/{path}, allowed values: "
+                    + ", ".join(self.DETECTOR_ENUMS[path])
+                )
 
     def _arm_then_run(self):
-        # status_code = 200
         response = {}
 
         # Send an arm command
@@ -572,8 +654,7 @@ class TristanDetector(OdinDataController):
         # Check for a timeout and if there is raise an error
         if _lookup(self._status, "state") != "armed":
             self.set_error("Time out waiting for detector armed state")
-            # status_code = 408
-            response["reply"] = "Time out waiting for detector armed state"
+            raise DetectorTimeoutError("Time out waiting for detector armed state")
         else:
             logger.info("Confirmed armed response")
             # Detector armed OK, now tell it to run
@@ -590,8 +671,9 @@ class TristanDetector(OdinDataController):
             # Check for a timeout and if there is raise an error
             if _lookup(self._status, "state") != "running":
                 self.set_error("Time out waiting for detector running state")
-                # status_code = 408
-                response["reply"] = "Time out waiting for detector running state"
+                raise DetectorTimeoutError(
+                    "Time out waiting for detector running state"
+                )
 
             else:
                 logger.info("Confirmed running response")
@@ -600,7 +682,8 @@ class TristanDetector(OdinDataController):
                     # acquisition status to active
                     self._acquisition_complete = False
                     logger.info("Acquisition confirmed, setting state to active")
-            response["reply"] = str(reply)
+            response["reply"] = None if reply is None else str(reply)
+        return response
 
     def send_udp_config(self):
         """
