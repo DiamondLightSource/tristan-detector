@@ -41,7 +41,7 @@ dev = [
 [project.scripts]
 tristan_control = "odin.main:main"
 tristan_meta_writer = "odin_data.meta_writer.meta_writer_app:main"
-tristan_simulator = "tristan_detector.control.control_simulator:main"
+tristan_simulator = "tristan_detector.simulator.control_simulator:main"
 
 [project.urls]
 GitHub = "https://github.com/DiamondLightSource/tristan-detector"

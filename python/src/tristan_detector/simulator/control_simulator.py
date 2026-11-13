@@ -9,9 +9,8 @@ import logging
 import threading
 import time
 
-from .event_simulator import TristanEventProducer
-from .tristan_channel import TristanChannel
-from .tristan_enums import (
+from ..control.tristan_channel import TristanChannel
+from ..control.tristan_enums import (
     TriggerClockSourceType,
     TriggerInTerminationType,
     TriggerInType,
@@ -20,7 +19,7 @@ from .tristan_enums import (
     TriggerTimestampType,
     TriggerTZeroType,
 )
-from .tristan_message import (
+from ..control.tristan_message import (
     GetMessage,
     PostMessage,
     PutMessage,
@@ -28,6 +27,7 @@ from .tristan_message import (
     TristanMessage,
     TristanMessageException,
 )
+from .event_simulator import TristanEventProducer
 from .tristan_reactor import TristanReactor
 
 

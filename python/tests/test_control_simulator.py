@@ -2,7 +2,6 @@ import time
 
 import pytest
 
-from tristan_detector.control.control_simulator import TristanControlSimulator
 from tristan_detector.control.tristan_channel import TristanChannel
 from tristan_detector.control.tristan_detector import TristanDetector, _lookup
 from tristan_detector.control.tristan_message import (
@@ -10,6 +9,7 @@ from tristan_detector.control.tristan_message import (
     ResponseMessage,
     TristanMessage,
 )
+from tristan_detector.simulator.control_simulator import TristanControlSimulator
 
 
 @pytest.fixture

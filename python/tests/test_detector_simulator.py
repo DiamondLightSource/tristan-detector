@@ -6,8 +6,8 @@ import time
 
 import pytest
 
-from tristan_detector.control.control_simulator import TristanControlSimulator
 from tristan_detector.control.tristan_detector import TristanDetector
+from tristan_detector.simulator.control_simulator import TristanControlSimulator
 
 
 def wait_for(condition, timeout=5.0):
