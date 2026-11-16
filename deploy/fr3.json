@@ -1,6 +1,6 @@
 [
   {
-    "decoder_type": "TRISTAN",
+    "decoder_type": "Tristan",
     "decoder_path": "/odin/lib",
     "rx_ports": "61651",
     "decoder_config": {
