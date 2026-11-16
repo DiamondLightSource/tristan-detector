@@ -24,13 +24,13 @@ class TristanMessage:
     RESPONSE_TYPE = "resp_type"
     MSG_DATA = "data"
 
-    def __init__(self, msg_type=None, msg_id=None, from_str=None):
+    def __init__(self, msg_type=None, msg_id=None, from_str=None, params=None):
         self._attrs = {}
 
         if not from_str:
             self._attrs[self.MSG_TYPE] = msg_type
-            self._attrs[self.MSG_ID] = msg_id
-            self._attrs[self.MSG_PARAMETERS] = {}
+            self._attrs[self.MSG_ID] = msg_id or TristanMessage.new_id()
+            self._attrs[self.MSG_PARAMETERS] = params or {}
 
         else:
             try:
@@ -115,29 +115,17 @@ class TristanMessage:
 
 class GetMessage(TristanMessage):
     def __init__(self, msg_id=None, params=None):
-        if not msg_id:
-            msg_id = TristanMessage.new_id()
-        super().__init__(msg_type=TristanMessage.MSG_TYPE_GET, msg_id=msg_id)
-        if params:
-            self._attrs[self.MSG_PARAMETERS] = params
+        super().__init__(TristanMessage.MSG_TYPE_GET, msg_id, params=params)
 
 
 class PutMessage(TristanMessage):
     def __init__(self, msg_id=None, params=None):
-        if not msg_id:
-            msg_id = TristanMessage.new_id()
-        super().__init__(msg_type=TristanMessage.MSG_TYPE_PUT, msg_id=msg_id)
-        if params:
-            self._attrs[self.MSG_PARAMETERS] = params
+        super().__init__(TristanMessage.MSG_TYPE_PUT, msg_id, params=params)
 
 
 class PostMessage(TristanMessage):
     def __init__(self, msg_id=None, params=None):
-        if not msg_id:
-            msg_id = TristanMessage.new_id()
-        super().__init__(msg_type=TristanMessage.MSG_TYPE_POST, msg_id=msg_id)
-        if params:
-            self._attrs[self.MSG_PARAMETERS] = params
+        super().__init__(TristanMessage.MSG_TYPE_POST, msg_id, params=params)
 
 
 class ResponseMessage(TristanMessage):
@@ -145,9 +133,7 @@ class ResponseMessage(TristanMessage):
     RESPONSE_ERROR = 1
 
     def __init__(self, msg_id=None, data=None, response_type=RESPONSE_OK):
-        if not msg_id:
-            msg_id = TristanMessage.new_id()
-        super().__init__(msg_type=TristanMessage.MSG_TYPE_RESPONSE, msg_id=msg_id)
+        super().__init__(TristanMessage.MSG_TYPE_RESPONSE, msg_id)
         del self._attrs[self.MSG_PARAMETERS]
         self._attrs[self.RESPONSE_TYPE] = response_type
         if data:

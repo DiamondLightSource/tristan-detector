@@ -52,8 +52,8 @@ def test_schema_paths_exist_before_detector_replies(detector):
 
 @pytest.mark.parametrize("meta", [False, True])
 def test_every_schema_path_is_in_tree(detector, meta):
-    for path in TristanDetector.DETECTOR_STATUS_FIELDS:
-        detector.get(f"status/detector/{path}", meta=meta)
+    for path in TristanDetector.STATUS_REQUEST_FIELDS:
+        detector.get(f"status/{path}", meta=meta)
     for path in TristanDetector.DETECTOR_CONFIG:
         detector.get(f"config/{path}", meta=meta)
 
@@ -465,3 +465,40 @@ def test_other_paths_outside_config_read_as_none(detector):
     # As on main, e.g. GETs of command paths
     assert detector.get("command/arm") == {"value": None}
     assert detector.get("command/start_acquisition") == {"value": None}
+
+
+def test_process_status_adds_mains_calculated_values(detector):
+    reply = json.loads(json.dumps(STATUS_REPLY))
+    status = detector._process_status(reply)
+
+    assert status["detector"]["bytes"] == 2048 * 512 * 2
+    assert status["detector"]["udp_packets_sent"] == 60
+    assert status["detector"]["version_check"] is True
+    assert status["clock"]["dpll_lol"] is True
+    assert status["clock"]["dpll_hold"] is False
+    assert status["sensor"]["temp_asics_0"] == [50.0, 60.0]
+    assert status["sensor"]["humidity_1"] == [6.0, 8.0]
+    # Raw fields are kept, and the reply itself is not modified
+    assert status["sensor"]["temp_asics"] == STATUS_REPLY["sensor"]["temp_asics"]
+    assert reply == STATUS_REPLY
+
+
+def test_process_status_tolerates_missing_and_malformed_fields(detector):
+    status = detector._process_status({"state": "idle", "sensor": {"temp_pcb": [[1]]}})
+    assert status["detector"]["version_check"] is False
+    assert "bytes" not in status["detector"]
+    # Too few channels in the reading: the split is skipped rather than failing
+    assert "temp_pcb_1" not in status["sensor"]
+
+
+def test_calculated_values_are_read_from_stored_status(polled):
+    polled._poll_detector()
+    assert polled.get("status/detector/bytes") == {"value": 2048 * 512 * 2}
+
+
+def test_status_tree_fields_come_from_the_status_request():
+    fields = TristanDetector.STATUS_REQUEST_FIELDS
+    assert fields[0] == "state"
+    assert "detector/acquisition_busy" in fields
+    assert "detector/module_dimensions/x_max" in fields
+    assert len(fields) == len(set(fields))

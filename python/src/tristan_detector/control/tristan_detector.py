@@ -4,6 +4,7 @@ Created on 1st November 2017
 :author: Alan Greer
 """
 
+import copy
 import getpass
 import json
 import logging
@@ -38,25 +39,6 @@ from .tristan_message import (
 
 logger = logging.getLogger(__name__)
 
-# Enum type of each enumerated config parameter (paths relative to config/)
-CONFIG_ENUM_TYPES: dict[str, type[Enum]] = {
-    "mode": ModeType,
-    "profile": ProfileType,
-    "trigger/start": TriggerInType,
-    "trigger/stop": TriggerInType,
-    "trigger/timestamp/fem": TriggerTimestampType,
-    "trigger/timestamp/lvds": TriggerTimestampType,
-    "trigger/timestamp/sync": TriggerTimestampType,
-    "trigger/timestamp/ttl": TriggerTimestampType,
-    "trigger/timestamp/tzero": TriggerTimestampType,
-    "trigger/ttl_in_term": TriggerInTerminationType,
-    "trigger/ttl_out_term": TriggerOutTerminationType,
-    "trigger/primary_clock_source": TriggerClockSourceType,
-    "trigger/tzero": TriggerTZeroType,
-    "trigger/ttl_out": TriggerOutType,
-    "trigger/lvds_out": TriggerOutType,
-}
-
 
 def _lookup(store: dict, path: str):
     """Return the value at a "/"-separated path in a nested dict, or None if absent"""
@@ -68,9 +50,20 @@ def _lookup(store: dict, path: str):
     return node
 
 
+def _nest(paths: list[str], leaf: Callable[[str], object]) -> dict:
+    """Build a nested dict from "/"-separated paths, with leaf(path) at each leaf"""
+    tree: dict = {}
+    for path in paths:
+        *parents, name = path.split("/")
+        node = tree
+        for parent in parents:
+            node = node.setdefault(parent, {})
+        node[name] = leaf(path)
+    return tree
+
+
 def _schema_branch(
     store: Callable[[], dict],
-    prefix: str,
     paths: list[str],
     metadata: dict[str, list[str]] | None = None,
 ) -> dict:
@@ -81,46 +74,27 @@ def _schema_branch(
     and the store itself may be replaced. Paths missing from the store read as None.
 
     :param store: callable returning the nested dict holding the values
-    :param prefix: path of this branch within the store ("" for the store root)
-    :param paths: "/"-separated leaf paths relative to the branch
+    :param paths: "/"-separated leaf paths within the store
     :param metadata: optional map of leaf path to its allowed values
     """
     metadata = metadata or {}
-    branch: dict = {}
-    for path in paths:
-        *parents, leaf = path.split("/")
-        node = branch
-        for parent in parents:
-            node = node.setdefault(parent, {})
-        store_path = f"{prefix}/{path}" if prefix else path
+
+    def leaf(path):
         leaf_meta = {"allowed_values": metadata[path]} if path in metadata else {}
-        node[leaf] = (lambda p=store_path: _lookup(store(), p), leaf_meta)
-    return branch
+        return (lambda: _lookup(store(), path), leaf_meta)
+
+    return _nest(paths, leaf)
 
 
-def _request_template(paths: list[str]) -> dict:
-    """Build a GET request template, with a None leaf for each "/"-separated path"""
-    template: dict = {}
-    for path in paths:
-        *parents, leaf = path.split("/")
-        node = template
-        for parent in parents:
-            node = node.setdefault(parent, {})
-        node[leaf] = None
-    return template
-
-
-def _first(value):
-    """The first element of a list value; other values are returned unchanged"""
-    return value[0] if isinstance(value, list) and value else value
-
-
-def _column(value, index: int):
-    """Element ``index`` of each per-module list in a 2D list value, or None"""
-    try:
-        return [module[index] for module in value]
-    except (TypeError, IndexError, KeyError):
-        return None
+def _template_paths(template: dict, prefix: str = "") -> list[str]:
+    """List the "/"-separated paths of the leaves of a GET request template"""
+    paths = []
+    for key, value in template.items():
+        if isinstance(value, dict):
+            paths += _template_paths(value, f"{prefix}{key}/")
+        else:
+            paths.append(f"{prefix}{key}")
+    return paths
 
 
 class DetectorTimeoutError(Exception):
@@ -132,13 +106,6 @@ class TristanDetector:
     TristanDetector class.
     """
 
-    STR_CONFIG = "config"
-    STR_STATUS = "status"
-
-    TEMP_ASICS_COUNT = 16
-    TEMP_PCB_COUNT = 2
-    HUMIDITY_COUNT = 2
-
     ADODIN_MAPPING = {
         "config/exposure_time": "config/exposure",
         "config/num_images": "config/frames",
@@ -149,35 +116,37 @@ class TristanDetector:
     # Config parameters polled from the detector and shown in the tree, as on main.
     # readout_time is deliberately absent (main never requested it); PUTs to it
     # are still passed through.
-    DETECTOR_CONFIG = [
-        "exposure",
-        "frames",
-        "frames_per_trigger",
-        "mode",
-        "ntrigger",
-        "profile",
-        "repeat_interval",
-        "threshold",
-        "timeslice/duration_rollover_bits",
-        "trigger/lvds_out",
-        "trigger/primary_clock_source",
-        "trigger/start",
-        "trigger/stop",
-        "trigger/timestamp/fem",
-        "trigger/timestamp/lvds",
-        "trigger/timestamp/sync",
-        "trigger/timestamp/ttl",
-        "trigger/timestamp/tzero",
-        "trigger/ttl_in_term",
-        "trigger/ttl_out",
-        "trigger/ttl_out_term",
-        "trigger/tzero",
-    ]
+    DETECTOR_CONFIG: dict[str, type[Enum] | None] = {
+        # Each path maps to the enum of its allowed values, if it is enumerated
+        "exposure": None,
+        "frames": None,
+        "frames_per_trigger": None,
+        "mode": ModeType,
+        "ntrigger": None,
+        "profile": ProfileType,
+        "repeat_interval": None,
+        "threshold": None,
+        "timeslice/duration_rollover_bits": None,
+        "trigger/lvds_out": TriggerOutType,
+        "trigger/primary_clock_source": TriggerClockSourceType,
+        "trigger/start": TriggerInType,
+        "trigger/stop": TriggerInType,
+        "trigger/timestamp/fem": TriggerTimestampType,
+        "trigger/timestamp/lvds": TriggerTimestampType,
+        "trigger/timestamp/sync": TriggerTimestampType,
+        "trigger/timestamp/ttl": TriggerTimestampType,
+        "trigger/timestamp/tzero": TriggerTimestampType,
+        "trigger/ttl_in_term": TriggerInTerminationType,
+        "trigger/ttl_out": TriggerOutType,
+        "trigger/ttl_out_term": TriggerOutTerminationType,
+        "trigger/tzero": TriggerTZeroType,
+    }
     STATUS_PATHS = ["status", "config", "command"]
     # Allowed values of each enumerated config parameter, from tristan_enums
     DETECTOR_ENUMS = {
         path: [e.name for e in enum_type]
-        for path, enum_type in CONFIG_ENUM_TYPES.items()
+        for path, enum_type in DETECTOR_CONFIG.items()
+        if enum_type is not None
     }
 
     # Types of numeric config values given in the URL (PUT config/<name>/<value>),
@@ -236,42 +205,8 @@ class TristanDetector:
             },
         }
     ]
-    # Fields of status/detector passed through from the detector reply.
-    # udp_packets_sent, bytes and version_check are derived (see __init__).
-    DETECTOR_STATUS_FIELDS = [
-        "acquisition_busy",
-        "crw",
-        "data_overrun",
-        "description",
-        "detector_type",
-        "fpga_busy",
-        "frames_acquired",
-        "loopaction",
-        "module_dimensions/x_max",
-        "module_dimensions/x_min",
-        "module_dimensions/y_max",
-        "module_dimensions/y_min",
-        "shutterbusy",
-        "shutteropen",
-        "sensor_material",
-        "sensor_thickness",
-        "serial_number",
-        "software_build",
-        "software_version",
-        "tick_hz",
-        "tick_ps",
-        "timeslice_number",
-        "timing_error",
-        "timing_warning",
-        "x_max",
-        "x_min",
-        "x_pixel_size",
-        "x_pixels_in_detector",
-        "y_max",
-        "y_min",
-        "y_pixel_size",
-        "y_pixels_in_detector",
-    ]
+    # Status fields in the tree from the status request (paths relative to status/)
+    STATUS_REQUEST_FIELDS = _template_paths(STATUS_REQUEST[0])
     # Other status fields passed through from the detector reply (paths relative
     # to status/). clock/dpll_* and the split sensor readings are derived.
     OTHER_STATUS_FIELDS = [
@@ -298,13 +233,27 @@ class TristanDetector:
     # Per-module 2D sensor readings split into one list per channel, as
     # status/sensor/<name>_<channel>
     SENSOR_CHANNELS = {
-        "temp_asics": TEMP_ASICS_COUNT,
-        "temp_pcb": TEMP_PCB_COUNT,
-        "humidity": HUMIDITY_COUNT,
+        "temp_asics": 16,
+        "temp_pcb": 2,
+        "humidity": 2,
     }
+    # Status fields added or replaced from each reply by _process_status, as main
+    # did (detector/udp_packets_sent, from the request, is also summed there)
+    CALCULATED_STATUS_FIELDS = [
+        "detector/bytes",
+        "detector/version_check",
+        "clock/dpll_lol",
+        "clock/dpll_hold",
+        *(
+            f"sensor/{name}_{index}"
+            for name, count in SENSOR_CHANNELS.items()
+            for index in range(count)
+        ),
+    ]
     # Config request sent to the detector each poll: every schema path
-    CONFIG_REQUEST = _request_template(DETECTOR_CONFIG)
+    CONFIG_REQUEST = _nest(list(DETECTOR_CONFIG), lambda _: None)
     DETECTOR_TIMEOUT = 1000
+    MESSAGE_TYPES = {"get": GetMessage, "put": PutMessage, "post": PostMessage}
 
     def __init__(
         self,
@@ -336,7 +285,7 @@ class TristanDetector:
 
         # Latest status and config replies from the detector. The parameter tree
         # reads from these on every GET; the update loop replaces them on each poll.
-        self._status: dict = {}
+        self._status: dict = {"detector": {"version_check": False}}
         self._config: dict = {}
         # Local state maintained by the update loop
         self._connected = False
@@ -359,9 +308,11 @@ class TristanDetector:
             "firmware": (lambda: self._firmware, {}),
             "udp_file": (lambda: self._udp_config_file, {}),
             "update_interval": (lambda: self._update_interval, {}),
-            self.STR_STATUS: self._build_status_tree(),
-            self.STR_CONFIG: _schema_branch(
-                lambda: self._config, "", self.DETECTOR_CONFIG, self.DETECTOR_ENUMS
+            "status": self._build_status_tree(),
+            "config": _schema_branch(
+                lambda: self._config,
+                list(self.DETECTOR_CONFIG),
+                self.DETECTOR_ENUMS,
             ),
         }
 
@@ -373,14 +324,13 @@ class TristanDetector:
         self._status_thread.start()
 
     def _build_status_tree(self) -> dict:
-        """Build the status branch: detector reply fields plus local/derived ones"""
+        """Build the status branch: stored status fields plus local ones"""
         status = _schema_branch(
             lambda: self._status,
-            "",
             [
-                "state",
-                *(f"detector/{path}" for path in self.DETECTOR_STATUS_FIELDS),
+                *self.STATUS_REQUEST_FIELDS,
                 *self.OTHER_STATUS_FIELDS,
+                *self.CALCULATED_STATUS_FIELDS,
             ],
         )
         status.update(
@@ -392,48 +342,46 @@ class TristanDetector:
                 "acquisition_complete": (lambda: self._acquisition_complete, {}),
             }
         )
-        status["detector"].update(
-            {
-                "bytes": (self._detector_bytes, {}),
-                "version_check": (self._version_check, {}),
-                "udp_packets_sent": (self._udp_packets_sent, {}),
-            }
-        )
-        for name in ("dpll_lol", "dpll_hold"):
-            status["clock"][name] = (
-                lambda n=name: _first(_lookup(self._status, f"clock/{n}")),
-                {},
-            )
-        for name, count in self.SENSOR_CHANNELS.items():
-            for index in range(count):
-                status["sensor"][f"{name}_{index}"] = (
-                    lambda n=name, i=index: _column(
-                        _lookup(self._status, f"sensor/{n}"), i
-                    ),
-                    {},
-                )
         return status
 
-    def _detector_bytes(self):
-        """Size of a full detector frame in bytes (2 bytes per pixel)"""
-        x_pixels = _lookup(self._status, "detector/x_pixels_in_detector")
-        y_pixels = _lookup(self._status, "detector/y_pixels_in_detector")
+    def _process_status(self, reply_status: dict) -> dict:
+        """Return a copy of a status reply with main's calculated values added
+
+        As main did after each status poll: the frame size in bytes, the per-module
+        UDP packet counts summed, version_check, the first element of each clock
+        dpll list, and each per-module 2D sensor reading split into one list per
+        channel (e.g. sensor/temp_asics_0). The reply itself is not modified.
+        """
+        status = copy.deepcopy(reply_status)
+
+        detector = status.setdefault("detector", {})
+        x_pixels = detector.get("x_pixels_in_detector")
+        y_pixels = detector.get("y_pixels_in_detector")
         if isinstance(x_pixels, int) and isinstance(y_pixels, int):
-            return x_pixels * y_pixels * 2
-        return None
-
-    def _version_check(self):
-        """Whether the connected detector runs the expected firmware version"""
-        return self._connected and self._firmware == _lookup(
-            self._status, "detector/software_version"
-        )
-
-    def _udp_packets_sent(self):
-        """Total UDP packets sent, summed over the per-module counts"""
-        packets = _lookup(self._status, "detector/udp_packets_sent")
+            detector["bytes"] = x_pixels * y_pixels * 2
+        packets = detector.get("udp_packets_sent")
         if isinstance(packets, list):
-            return sum(packets)
-        return packets
+            detector["udp_packets_sent"] = sum(packets)
+        detector["version_check"] = self._firmware == detector.get("software_version")
+
+        clock = status.get("clock", {})
+        for name in ("dpll_lol", "dpll_hold"):
+            value = clock.get(name)
+            if isinstance(value, list) and value:
+                clock[name] = value[0]
+
+        sensor = status.get("sensor", {})
+        for name, count in self.SENSOR_CHANNELS.items():
+            readings = sensor.get(name)
+            if not isinstance(readings, list):
+                continue
+            for index in range(count):
+                try:
+                    sensor[f"{name}_{index}"] = [module[index] for module in readings]
+                except (TypeError, IndexError, KeyError):
+                    pass
+
+        return status
 
     def set_error(self, err: str):
         """Record an error message in status/error and log it"""
@@ -460,7 +408,7 @@ class TristanDetector:
         """Handle GET requests from the controller interface."""
         # Handle empty path — return available endpoints
         if not path:
-            return {"status": self.STATUS_PATHS, "config": self.DETECTOR_CONFIG}
+            return {"status": self.STATUS_PATHS, "config": list(self.DETECTOR_CONFIG)}
 
         # Handle ADODIN_MAPPING translation
         if path in self.ADODIN_MAPPING:
@@ -478,9 +426,9 @@ class TristanDetector:
                 # As on main, other status paths are looked up in the latest status
                 # reply, reading as None if the detector did not send them; any
                 # other path outside config (e.g. command/arm) reads as None
-                if meta or path.split("/")[0] == self.STR_CONFIG:
+                if meta or path.split("/")[0] == "config":
                     raise
-                status_path = path.removeprefix(f"{self.STR_STATUS}/")
+                status_path = path.removeprefix("status/")
                 if status_path == path:
                     return {"value": None}
                 return {"value": _lookup(self._status, status_path)}
@@ -488,25 +436,13 @@ class TristanDetector:
 
         # As on main (and as the web UI expects), status and config values are
         # returned as {"value": v}; top-level fields keep their name as the key
-        if not meta and path.split("/")[0] in (self.STR_STATUS, self.STR_CONFIG):
+        if not meta and path.split("/")[0] in ("status", "config"):
             return {"value": result[path.rsplit("/", 1)[-1]]}
         return result
 
-    def _send(self, cmd_type: str, cmd: str, value: str | int | float | dict | list):
-        match cmd_type:
-            case "put":
-                msg = PutMessage()
-            case "post":
-                msg = PostMessage()
-            case "get":
-                msg = GetMessage()
-            case _:
-                raise AssertionError(f"{cmd_type} is not a valid command type")
-
-        msg.set_param(cmd, value)
-        reply = self.send_recv(msg)
-
-        return reply
+    def _send(self, msg_type: str, name: str, value):
+        """Send a "get", "put" or "post" message with one parameter; return the reply"""
+        return self.send_recv(self.MESSAGE_TYPES[msg_type](params={name: value}))
 
     def put(self, path, value):
         """Handle PUT requests from the controller interface.
@@ -705,11 +641,15 @@ class TristanDetector:
         if not isinstance(reply, ResponseMessage):
             if self._connected:
                 logger.warning("Lost connection to detector at %s", self._endpoint)
+                # As on main, version_check is false while disconnected; the rest
+                # of the last status is kept
+                detector = {**self._status.get("detector", {}), "version_check": False}
+                self._status = {**self._status, "detector": detector}
             self._connected = False
             return
 
         logger.debug("Status reply: %s", reply)
-        self._status = reply.data["status"]
+        self._status = self._process_status(reply.data["status"])
         if not self._connected:
             logger.info("Connected to detector at %s", self._endpoint)
             self._on_connect()

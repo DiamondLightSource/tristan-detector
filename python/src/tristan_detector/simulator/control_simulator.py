@@ -128,26 +128,8 @@ class TristanControlSimulator:
                 },
                 "clock": {"dpll_lol": [True], "dpll_hold": [True], "clock_freq": 65.7},
                 "sensor": {
-                    "temp_asics": [
-                        [
-                            50.0,
-                            50.1,
-                            50.2,
-                            50.3,
-                            50.4,
-                            50.5,
-                            50.6,
-                            50.7,
-                            50.8,
-                            50.9,
-                            51.0,
-                            51.1,
-                            51.2,
-                            51.3,
-                            51.4,
-                            51.5,
-                        ]
-                    ]
+                    # 50.0, 50.1, ... 51.5 for each of the 16 ASICs
+                    "temp_asics": [[round(50.0 + 0.1 * i, 1) for i in range(16)]]
                     * self._sensor,
                     "temp_pcb": [[60.0, 60.1]] * self._sensor,
                     "humidity": [[47.8, 48.1]] * self._sensor,
