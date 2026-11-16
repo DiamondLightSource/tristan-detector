@@ -61,14 +61,6 @@ class TristanMessage:
     def get_attribute(self, name):
         return self._attrs[name]
 
-    def get_param(self, param_name):
-        try:
-            param_value = self._attrs[self.MSG_PARAMETERS][param_name]
-        except KeyError:
-            raise TristanMessageException("Missing parameter " + param_name) from None
-
-        return param_value
-
     def set_param(self, param_name, param_value):
         if self.MSG_PARAMETERS not in self._attrs:
             self._attrs[self.MSG_PARAMETERS] = {}
@@ -78,12 +70,6 @@ class TristanMessage:
     # @return a bytes-like object, not a string.
     def encode(self):
         return json.dumps(self._attrs).encode()
-
-    def __eq__(self, other):
-        return self._attrs == other.attrs
-
-    def __ne__(self, other):
-        return self._attrs != other.attrs
 
     def __str__(self):
         return json.dumps(self._attrs, sort_keys=True, indent=4, separators=(",", ": "))

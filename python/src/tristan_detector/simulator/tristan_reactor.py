@@ -1,51 +1,11 @@
-import datetime
 import logging
 
 import zmq
 
 
-class TristanReactorTimer:
-    last_timer_id = 0
-
-    def __init__(self, delay_ms, times, callback):
-        self._log = logging.getLogger(".".join([__name__, self.__class__.__name__]))
-        TristanReactorTimer.last_timer_id += 1
-        self._timer_id = TristanReactorTimer.last_timer_id
-        self._delay_ms = delay_ms
-        self._times = times
-        self._callback = callback
-        self._when = self.clock_mono_ms() + delay_ms
-        self._expired = False
-
-    def get_id(self):
-        return self._timer_id
-
-    def do_callback(self):
-        self._callback()
-
-        if (self._times > 0) and ((self._times - 1) == 0):
-            self._expired = True
-        else:
-            self._when += self._delay_ms
-
-    def has_fired(self):
-        return TristanReactorTimer.clock_mono_ms() >= self._when
-
-    def has_expired(self):
-        return self._expired
-
-    def when(self):
-        return self._when
-
-    @staticmethod
-    def clock_mono_ms():
-        time = datetime.datetime.now()
-        time_ms = int(time.strftime("%s")) * 1000.0 + int(time.microsecond / 1000.0)
-        # log.debug("%12d", time_ms)
-        return time_ms
-
-
 class TristanReactor:
+    """Poll registered channels and call each one's callback when it has a message"""
+
     # Longest time a poll blocks, so that stop() takes effect promptly
     MAX_POLL_TIMEOUT_MS = 100
 
@@ -54,9 +14,7 @@ class TristanReactor:
         self._log = logging.getLogger(".".join([__name__, self.__class__.__name__]))
         self._log.setLevel(logging.DEBUG)
         self._terminate_reactor = False
-        self._pollitems = {}
         self._callbacks = {}
-        self._timers = {}
         self._pollsize = 0
         self._needs_rebuild = True
         self._channels = {}
@@ -68,67 +26,41 @@ class TristanReactor:
         # Signal a rebuild is required
         self._needs_rebuild = True
 
-    def remove_channel(self, channel):
-        # Remove the channel from the map
-        self._channels.pop(channel.socket)
-        # Signal a rebuild is required
-        self._needs_rebuild = True
-
     def stop(self):
         """Ask the reactor loop to exit; safe to call from another thread"""
         self._terminate_reactor = True
 
-    def register_timer(self, delay_ms, times, callback):
-        timer = TristanReactorTimer(delay_ms, times, callback)
-        self._timers[timer.get_id()] = timer
-        return timer.get_id()
-
     def run(self):
-        rc = 0
         # Loop until the terminate flag is set
         while not self._terminate_reactor:
             # If the poll items list needs rebuilding, do it now
             if self._needs_rebuild:
                 self.rebuild_pollitems()
 
-            # If there are no channels to poll and no timers active,
-            # break out of the reactor loop cleanly
+            # If there are no channels to poll, break out of the loop cleanly
             if self._pollsize == 0:
-                rc = 0
                 break
 
             try:
-                # Poll the registered channels, using the tickless timeout based
-                # on the next pending timer
-                pollrc = dict(self._poller.poll(self.calculate_timeout()))
+                pollrc = dict(self._poller.poll(self.MAX_POLL_TIMEOUT_MS))
 
                 for sock in pollrc:
                     if pollrc[sock] == zmq.POLLIN:
                         try:
-                            # reply = self._channels[sock].recv()
-                            # msg = TristanMessage.parse_json(reply)
                             self._callbacks[sock]()
                         except Exception as e:
-                            # TODO: How to handle an exception here
                             self._log.debug(
                                 "Caught exception in reactor-callback function"
                             )
                             self._log.exception(e)
 
-                for timer in self._timers:
-                    if self._timers[timer].has_fired():
-                        self._timers[timer].do_callback()
-                    if self._timers[timer].has_expired():
-                        self._timers.pop(timer)
-
             except Exception as e:
                 self._log.exception(e)
                 break
 
-        return rc
+        return 0
 
     def rebuild_pollitems(self):
-        # If the existing pollitems array is valid, delete it
         self._poller = zmq.Poller()
 
         self._pollsize = len(self._channels)
@@ -139,18 +71,3 @@ class TristanReactor:
                 self._poller.register(channel, zmq.POLLIN)
 
         self._needs_rebuild = False
-
-    def calculate_timeout(self) -> int:
-        # Calculate shortest timeout up to MAX_POLL_TIMEOUT_MS, looping through
-        # current timers to see which fires first
-        tickless = TristanReactorTimer.clock_mono_ms() + self.MAX_POLL_TIMEOUT_MS
-        for timer in self._timers:
-            if tickless > self._timers[timer].when():
-                tickless = self._timers[timer].when()
-
-        # Calculate current timeout based on that, set to zero (don't wait) if
-        # there is no timers pending
-        timeout = tickless - TristanReactorTimer.clock_mono_ms()
-        if timeout < 0:
-            timeout = 0
-        return int(timeout)

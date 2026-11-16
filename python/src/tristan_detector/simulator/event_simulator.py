@@ -1,4 +1,3 @@
-import argparse
 import logging
 import socket
 import struct
@@ -134,24 +133,6 @@ class TristanPacket:
             else:
                 byte_array += struct.pack("<Q", word)
         return byte_array
-
-
-class Range(argparse.Action):
-    """
-    Range validating action for argument parser.
-    """
-
-    def __init__(self, min=None, max=None, *args, **kwargs):
-        self.min = min
-        self.max = max
-        kwargs["metavar"] = f"[{self.min}-{self.max}]"
-        super().__init__(*args, **kwargs)
-
-    def __call__(self, parser, namespace, value, option_string=None):
-        if not self.min <= value <= self.max:
-            msg = f"invalid choice: {value!r} (choose from [{self.min}-{self.max}])"
-            raise argparse.ArgumentError(self, msg)
-        setattr(namespace, self.dest, value)
 
 
 class TristanProducerDefaults:

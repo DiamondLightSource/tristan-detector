@@ -54,21 +54,18 @@ class TristanChannel:
             self.socket.setsockopt(zmq.IMMEDIATE, 1)
 
     def bind(self, endpoint=None):
-
         if endpoint:
             self.endpoint = endpoint
 
         self.socket.bind(self.endpoint)
 
     def connect(self, endpoint=None):
-
         if endpoint:
             self.endpoint = endpoint
 
         self.socket.connect(self.endpoint)
 
     def close(self):
-
         self.socket.close()
 
     def send(self, data):
@@ -91,15 +88,9 @@ class TristanChannel:
         self.socket.send_multipart(send_list)
 
     def recv(self):
-
         data = self.socket.recv()
         return data
 
     def poll(self, timeout=None):
-
         pollevts = self.socket.poll(timeout)
         return pollevts
-
-    def subscribe(self, topic=b""):
-
-        self.socket.setsockopt(TristanChannel.CHANNEL_TYPE_SUB, topic)
