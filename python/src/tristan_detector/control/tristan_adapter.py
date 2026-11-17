@@ -1,12 +1,13 @@
+import asyncio
 import logging
 
 from odin.adapters.adapter import (
-    ApiAdapter,
     ApiAdapterResponse,
     request_types,
     response_types,
     wants_metadata,
 )
+from odin.adapters.async_adapter import AsyncApiAdapter
 from odin.adapters.parameter_tree import ParameterTreeError
 from tornado.escape import json_decode
 
@@ -15,12 +16,17 @@ from .tristan_detector import DetectorTimeoutError, TristanDetector
 logger = logging.getLogger(__name__)
 
 
-class TristanAdapter(ApiAdapter):
+class TristanAdapter(AsyncApiAdapter):
     """An odin-control adapter for a Tristan detector
 
     This class provides the adapter interface between the ODIN server and the Tristan
     detector system. It is a thin layer that translates HTTP verbs into calls on a
     TristanDetector controller, which owns all communication with the hardware.
+
+    It is an async adapter so that requests which wait on the detector (PUTs, which
+    can take up to ~20 s for start_acquisition) run in a worker thread instead of
+    blocking the odin server's event loop. GETs only read locally stored state, so
+    they are answered directly.
 
     Configuration options:
         endpoint: ZeroMQ endpoint of the detector control interface (required)
@@ -46,7 +52,7 @@ class TristanAdapter(ApiAdapter):
 
     @request_types("application/json", "application/vnd.odin-native")
     @response_types("application/json", default="application/json")
-    def get(self, path, request):
+    async def get(self, path, request):
         """Handle an HTTP GET request by reading from the controller
 
         :param path: URI path of the GET request
@@ -64,19 +70,20 @@ class TristanAdapter(ApiAdapter):
 
     @request_types("application/json", "application/vnd.odin-native")
     @response_types("application/json", default="application/json")
-    def put(self, path, request):
+    async def put(self, path, request):
         """Handle an HTTP PUT request by passing the decoded body to the controller
 
         The body may be empty (e.g. for commands), a JSON document or a plain string.
-        The controller's result (the detector's reply) is returned as the body.
+        The controller's result (the detector's reply) is returned as the body. The
+        controller call waits on the detector, so it runs in a worker thread.
 
         :param path: URI path of the PUT request
         :param request: Tornado HTTP request object
         :return: ApiAdapterResponse object to be returned to the client
         """
         try:
-            response = self._controller.put(
-                path.strip("/"), self._decode_body(request.body)
+            response = await asyncio.to_thread(
+                self._controller.put, path.strip("/"), self._decode_body(request.body)
             )
             status_code = 200
         except (ParameterTreeError, ValueError) as error:
@@ -90,7 +97,7 @@ class TristanAdapter(ApiAdapter):
 
     @request_types("application/json", "application/vnd.odin-native")
     @response_types("application/json", default="application/json")
-    def delete(self, path, request):
+    async def delete(self, path, request):
         """Handle an HTTP DELETE request by passing it to the controller
 
         :param path: URI path of the DELETE request
@@ -106,9 +113,12 @@ class TristanAdapter(ApiAdapter):
 
         return ApiAdapterResponse(response, status_code=status_code)
 
-    def cleanup(self):
-        """Stop the controller's background thread and close the detector channel"""
-        self._controller.shutdown()
+    async def cleanup(self):
+        """Stop the controller's background thread and close the detector channel
+
+        This can wait for an in-progress poll to finish, so it runs in a worker thread.
+        """
+        await asyncio.to_thread(self._controller.shutdown)
 
     @staticmethod
     def _decode_body(body):

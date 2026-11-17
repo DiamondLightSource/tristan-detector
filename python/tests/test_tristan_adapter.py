@@ -1,4 +1,6 @@
+import asyncio
 import json
+import threading
 
 import pytest
 from odin.adapters.adapter import ApiAdapterRequest
@@ -17,6 +19,7 @@ class FakeDetector:
         self.module = module
         self.calls = []
         self.shut_down = False
+        self.release = threading.Event()
 
     def get(self, path, meta=False):
         self.calls.append(("get", path, meta))
@@ -30,6 +33,9 @@ class FakeDetector:
             raise ValueError("Unknown path: bad")
         if path == "slow":
             raise DetectorTimeoutError("Time out waiting for detector armed state")
+        if path == "block":
+            # Wait (as a detector request would) until the test releases it
+            assert self.release.wait(5)
         return {"reply": f"reply to {path}"}
 
     def delete(self, path):
@@ -83,19 +89,21 @@ def test_missing_endpoint_raises(monkeypatch):
 
 
 def test_get_delegates_to_controller(adapter):
-    response = adapter.get("/status/state/", json_request())
+    response = asyncio.run(adapter.get("/status/state/", json_request()))
     assert response.status_code == 200
     assert response.data == {"status/state": 1}
     assert adapter._controller.calls == [("get", "status/state", False)]
 
 
 def test_get_passes_metadata_flag(adapter):
-    adapter.get("status", json_request(accept="application/json;metadata=true"))
+    asyncio.run(
+        adapter.get("status", json_request(accept="application/json;metadata=true"))
+    )
     assert adapter._controller.calls == [("get", "status", True)]
 
 
 def test_get_invalid_path_is_bad_request(adapter):
-    response = adapter.get("bad", json_request())
+    response = asyncio.run(adapter.get("bad", json_request()))
     assert response.status_code == 400
     assert "Invalid path" in response.data["error"]
 
@@ -111,45 +119,64 @@ def test_get_invalid_path_is_bad_request(adapter):
     ],
 )
 def test_put_decodes_body(adapter, body, expected):
-    response = adapter.put("config/exposure", json_request(body))
+    response = asyncio.run(adapter.put("config/exposure", json_request(body)))
     assert response.status_code == 200
     assert adapter._controller.calls == [("put", "config/exposure", expected)]
 
 
 def test_put_native_request_passes_object_through(adapter):
     request = ApiAdapterRequest({"exposure": 1.5})  # odin-native content type
-    response = adapter.put("config", request)
+    response = asyncio.run(adapter.put("config", request))
     assert response.status_code == 200
     assert adapter._controller.calls == [("put", "config", {"exposure": 1.5})]
 
 
 def test_put_error_is_bad_request(adapter):
-    response = adapter.put("bad", json_request("1"))
+    response = asyncio.run(adapter.put("bad", json_request("1")))
     assert response.status_code == 400
     assert "Unknown path" in response.data["error"]
 
 
 def test_delete_is_not_implemented(adapter):
-    response = adapter.delete("config", json_request())
+    response = asyncio.run(adapter.delete("config", json_request()))
     assert response.status_code == 501
     assert adapter._controller.calls == [("delete", "config")]
 
 
 def test_cleanup_shuts_down_controller(adapter):
-    adapter.cleanup()
+    asyncio.run(adapter.cleanup())
     assert adapter._controller.shut_down
 
 
 def test_put_returns_controller_reply(adapter):
-    response = adapter.put("command/arm", json_request())
+    response = asyncio.run(adapter.put("command/arm", json_request()))
     assert response.data == {"reply": "reply to command/arm"}
 
 
 def test_put_timeout_is_request_timeout(adapter):
-    response = adapter.put("slow", json_request())
+    response = asyncio.run(adapter.put("slow", json_request()))
     assert response.status_code == 408
     assert "armed state" in response.data["error"]
 
 
 def test_adapter_name_is_reported_as_module(adapter):
     assert adapter._controller.module == "TristanAdapter"
+
+
+def test_get_is_answered_while_a_put_waits_on_the_detector(adapter):
+    async def scenario():
+        # A PUT that blocks inside the controller, as start_acquisition would
+        put = asyncio.create_task(adapter.put("block", json_request()))
+        await asyncio.sleep(0.05)
+        assert not put.done()
+        # The event loop is free, so a GET is answered in the meantime
+        response = await asyncio.wait_for(
+            adapter.get("status/state", json_request()), timeout=1
+        )
+        assert response.status_code == 200
+        assert not put.done()
+        adapter._controller.release.set()
+        return await asyncio.wait_for(put, timeout=5)
+
+    put_response = asyncio.run(scenario())
+    assert put_response.status_code == 200
