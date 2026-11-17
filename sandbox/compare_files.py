@@ -76,7 +76,9 @@ def compare_files(filen1, filen2):
 
 
 def main():
-    parser = argparse.ArgumentParser(prog="thisprog", description="LATRD pixel counter")
+    parser = argparse.ArgumentParser(
+        prog="thisprog", description="Tristan pixel counter"
+    )
 
     parser.add_argument(
         "-f1",

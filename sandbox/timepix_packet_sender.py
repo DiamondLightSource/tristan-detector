@@ -33,7 +33,7 @@ class TimepixPacketSender:
             self._host.append(host)
             self._port.append(int(port))
 
-        print("Starting LATRD data transmission to:", self._host)
+        print("Starting Tristan data transmission to:", self._host)
         # Open UDP socket
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
@@ -53,12 +53,16 @@ class TimepixPacketSender:
                 continue
             word = DataWord(data)
 
-            if self._timestamp_course == 0 and not word.is_event and word.ctrl_type == 0x20:  # Extended Time
-                        print("Extended time found at index", self._count)
-                        self._timestamp_word = word
-                        udp_packet.add_word(self._timestamp_word.raw)
-                        self._prev_timestamp_course = self._timestamp_course
-                        self._timestamp_course = word.timestamp_course
+            if (
+                self._timestamp_course == 0
+                and not word.is_event
+                and word.ctrl_type == 0x20
+            ):  # Extended Time
+                print("Extended time found at index", self._count)
+                self._timestamp_word = word
+                udp_packet.add_word(self._timestamp_word.raw)
+                self._prev_timestamp_course = self._timestamp_course
+                self._timestamp_course = word.timestamp_course
             else:
                 # Once we have our first timestamp then we can create UDP packets
                 udp_packet.add_word(word.raw)

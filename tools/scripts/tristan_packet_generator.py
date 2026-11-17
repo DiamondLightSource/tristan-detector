@@ -1,5 +1,5 @@
 """
-LATRDProducer - load LATRD packets from packet capture file and send via UDP.
+TristanProducer - load Tristan packets from packet capture file and send via UDP.
 
 Tim Nicholls, STFC Application Engineering Group.
 """
@@ -184,7 +184,7 @@ class CsvAction(argparse.Action):
         setattr(namespace, self.dest, item_list)
 
 
-class LATRDProducerDefaults:
+class TristanProducerDefaults:
     """
     Holds default values for frame producer parameters.
     """
@@ -208,9 +208,9 @@ class LATRDProducerDefaults:
         }
 
 
-class LATRDFrameProducer:
+class TristanFrameProducer:
     """
-    LATRD frame procducer - loads frame packets data from capture file and replays it to
+    Tristan frame procducer - loads frame packets data from capture file and replays it to
     a receiver via a UDP socket.
     """
 
@@ -234,7 +234,7 @@ class LATRDFrameProducer:
         self._pkt_number = 0
 
         # Load default parameters
-        self.defaults = LATRDProducerDefaults()
+        self.defaults = TristanProducerDefaults()
 
         self._no_of_ports = 1
 
@@ -246,8 +246,8 @@ class LATRDFrameProducer:
 
         # Build options for the argument parser
         parser = argparse.ArgumentParser(
-            prog="latrd_pcap_replay.py",
-            description="LATRD frame producer",
+            prog="tristan_pcap_replay.py",
+            description="Tristan frame producer",
             formatter_class=lambda prog: argparse.ArgumentDefaultsHelpFormatter(
                 prog, max_help_position=40, width=term_columns
             ),
@@ -492,7 +492,7 @@ class LATRDFrameProducer:
 
 
 if __name__ == "__main__":
-    LATRDFrameProducer().run()
+    TristanFrameProducer().run()
     # ts = TristanTimestampWord(TristanData.TIMESTAMP)
     # print("0x{0:016X}".format(ts.to_64_bit_word()))
     # te = TristanWord(TristanData.TIMESTAMP)

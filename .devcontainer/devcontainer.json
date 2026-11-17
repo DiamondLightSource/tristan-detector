@@ -48,5 +48,8 @@
         // add extra mounts below
         // "source=${localWorkspaceFolder},target=/odin-data,type=bind"
         "source=/dev/shm,target=/dev/shm,type=bind"
-    ]
+    ],
+    // After the container is created, install this package (editable) and its dev
+    // tools into the image's /venv, alongside the image's odin-data
+    "postCreateCommand": "pip install -e ./python --group ./python/pyproject.toml:dev"
 }

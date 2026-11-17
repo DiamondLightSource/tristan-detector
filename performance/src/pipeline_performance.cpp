@@ -270,7 +270,7 @@ int main(int argc, char** argv)
 	for (int testNumber = 0; testNumber < tests; testNumber++){
 		FileWriter *fPtr = new FileWriter();
 		std::stringstream fname;
-		fname << "/scratch/gnx91527/latrd_" << testNumber << ".h5";
+		fname << "/scratch/gnx91527/tristan_" << testNumber << ".h5";
 		fPtr->startWriting(fname.str());
 
 		bb.resetBufferPtr();

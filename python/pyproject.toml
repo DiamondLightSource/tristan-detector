@@ -11,7 +11,16 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 description = "Tristan detector for odin control"
-dependencies = ["odin_control~=2.1.0", "tornado>=4.3", "python-dateutil"]
+dependencies = [
+    # Match the odin-control commit odin-data is built against (odin-control 2.x
+    # renames the `odin` package to `odin_control`, which odin-data does not support
+    # yet). odin-data itself is provided by the odin-data-build image and is
+    # deliberately not listed: its installed metadata has an unpinned odin-control git
+    # requirement that pip would resolve to 2.x.
+    "odin-control @ git+https://github.com/odin-detector/odin-control@1cf475b60abf66666d31c7e74b9d19540c2ea6c3",
+    "tornado>=4.3",
+    "python-dateutil",
+]
 dynamic = ["version"]
 license.file = "LICENSE"
 readme = "README.md"
@@ -21,6 +30,7 @@ requires-python = ">=3.11"
 dev = [
     "mypy",
     "pre-commit",
+    "pyright",
     "pytest",
     "pytest-cov",
     "ruff",
@@ -31,7 +41,7 @@ dev = [
 [project.scripts]
 tristan_control = "odin.main:main"
 tristan_meta_writer = "odin_data.meta_writer.meta_writer_app:main"
-tristan_simulator = "tristan_detector.control.control_simulator:main"
+tristan_simulator = "tristan_detector.simulator.control_simulator:main"
 
 [project.urls]
 GitHub = "https://github.com/DiamondLightSource/tristan-detector"
@@ -54,6 +64,10 @@ where = ["src"]
 [tool.setuptools_scm]
 root = ".."
 version_file = "src/tristan_detector/_version.py"
+
+[tool.pyright]
+typeCheckingMode = "standard"
+reportMissingImports = false  # Ignore missing stubs in imported modules
 
 [tool.pytest.ini_options]
 # Run pytest with all our checkers, and don't spam us with massive tracebacks on error
